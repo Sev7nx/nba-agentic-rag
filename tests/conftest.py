@@ -62,3 +62,42 @@ def fake_tools():
         ],
         "fetch_page": lambda q: [],
     }
+
+
+@pytest.fixture
+def fake_service():
+    from app.models import ChatResponse, Source
+
+    class FakeService:
+        def answer(self, request):
+            return ChatResponse(
+                answer="answer [1]",
+                sources=[
+                    Source(
+                        id=1,
+                        title="t",
+                        url="https://example.com",
+                        site="example",
+                        type="news",
+                    )
+                ],
+                trace=[],
+            )
+
+    return FakeService()
+
+
+@pytest.fixture
+def client(fake_service, tmp_path):
+    from fastapi.testclient import TestClient
+
+    from app.main import app, get_chat_service, get_profile_store
+    from app.services.profile import ProfileStore
+
+    app.dependency_overrides[get_chat_service] = lambda: fake_service
+    app.dependency_overrides[get_profile_store] = lambda: ProfileStore(
+        tmp_path / "profile.json"
+    )
+    with TestClient(app) as test_client:
+        yield test_client
+    app.dependency_overrides.clear()
