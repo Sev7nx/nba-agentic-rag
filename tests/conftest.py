@@ -11,7 +11,7 @@ class FakeLLM:
         return schema(**self.payload)
 
     def chat_text(self, system, user):
-        return "answer"
+        return "answer [1]"
 
 
 @pytest.fixture

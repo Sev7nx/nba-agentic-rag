@@ -4,7 +4,7 @@ from app.agent.graph import build_graph
 def test_graph_runs_with_fake_tools(fake_llm, fake_tools):
     graph = build_graph(fake_llm, fake_tools)
     out = graph.invoke({"question": "库里最经典的比赛", "history": [], "profile": {}, "rounds": 0})
-    assert out["answer"] == "answer"
+    assert "answer" in out["answer"]
     assert len(out["sources"]) == 2
 
 

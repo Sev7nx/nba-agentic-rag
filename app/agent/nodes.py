@@ -1,3 +1,4 @@
+import re
 from typing import Literal
 
 from pydantic import BaseModel, Field
@@ -74,7 +75,7 @@ def execute_tools(state: AgentState, tools: dict) -> dict:
 
 
 def synthesize(state: AgentState, llm: LLMClient) -> dict:
-    evidence = state.get("tool_results") or []
+    evidence = state.get("evidence") or state.get("tool_results") or []
     if not evidence:
         return {"answer": "没找到可靠来源，试试换个问法。", "sources": []}
 
@@ -101,3 +102,67 @@ def synthesize(state: AgentState, llm: LLMClient) -> dict:
         f"问题: {state['question']}\n来源:\n{context}",
     )
     return {"answer": answer, "sources": sources}
+
+
+SOURCE_QUALITY = {
+    "nba.com": 1.0,
+    "espn.com": 0.9,
+    "sports.qq.com": 0.8,
+    "hupu.com": 0.7,
+    "bilibili.com": 0.6,
+    "youtube.com": 0.6,
+}
+
+
+def _as_dict(item) -> dict:
+    return item.model_dump() if hasattr(item, "model_dump") else item
+
+
+def _quality(url: str) -> float:
+    for domain, score in SOURCE_QUALITY.items():
+        if domain in url:
+            return score
+    return 0.5
+
+
+def grade_evidence(state: AgentState) -> dict:
+    seen: set[str] = set()
+    ranked: list[tuple[float, dict]] = []
+    entities = (state.get("analysis") or {}).get("entities", [])
+    for item in state.get("tool_results") or []:
+        data = _as_dict(item)
+        url = data.get("url", "")
+        if not url or url in seen:
+            continue
+        seen.add(url)
+        text = f"{data.get('title', '')} {data.get('snippet', '')}"
+        entity_bonus = 0.1 if any(entity in text for entity in entities) else 0.0
+        recency_bonus = 0.05 if data.get("published_date") else 0.0
+        ranked.append((_quality(url) + entity_bonus + recency_bonus, data))
+    ranked.sort(key=lambda item: item[0], reverse=True)
+    return {"evidence": [data for _, data in ranked[:8]]}
+
+
+def verify(state: AgentState) -> dict:
+    answer = (state.get("answer") or "").strip()
+    sources = state.get("sources") or []
+    if not answer:
+        return {"verified": False, "verification_notes": "empty answer"}
+    if not sources:
+        return {"verified": False, "verification_notes": "no sources"}
+    if not re.search(r"\[\d+\]", answer):
+        return {"verified": False, "verification_notes": "no inline citations"}
+    return {"verified": True, "verification_notes": "ok"}
+
+
+def refine_query(state: AgentState) -> dict:
+    rounds = (state.get("rounds") or 0) + 1
+    refined = [
+        {
+            "tool": call.get("tool", ""),
+            "query": f"{call.get('query', '')} 最新 详细",
+            "reason": "retry with broader query",
+        }
+        for call in (state.get("plan") or [])[:4]
+    ]
+    return {"rounds": rounds, "plan": refined}
