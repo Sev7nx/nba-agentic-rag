@@ -1,0 +1,20 @@
+{"id": "news-1", "question": "勇士最近有什么交易传闻？", "expected_facts": ["交易"], "expected_source_types": ["news"], "needs_link": true}
+{"id": "news-2", "question": "湖人最近签下了谁？", "expected_facts": ["签约"], "expected_source_types": ["news"], "needs_link": true}
+{"id": "news-3", "question": "凯尔特人本赛季的战绩怎么样？", "expected_facts": ["战绩"], "expected_source_types": ["news"], "needs_link": true}
+{"id": "news-4", "question": "约基奇最近有伤病吗？", "expected_facts": ["伤病"], "expected_source_types": ["news"], "needs_link": true}
+{"id": "news-5", "question": "独行侠最近的交易流言有哪些？", "expected_facts": ["交易"], "expected_source_types": ["news"], "needs_link": true}
+{"id": "history-1", "question": "库里哪场比赛最经典？", "expected_facts": ["经典比赛"], "expected_source_types": ["doc", "video"], "needs_link": true}
+{"id": "history-2", "question": "2016 年总决赛第七场发生了什么？", "expected_facts": ["总决赛", "第七场"], "expected_source_types": ["doc", "video"], "needs_link": true}
+{"id": "history-3", "question": "乔丹的最后一投是哪场比赛？", "expected_facts": ["最后一投"], "expected_source_types": ["doc", "video"], "needs_link": true}
+{"id": "history-4", "question": "科比退役战得了多少分？", "expected_facts": ["60 分"], "expected_source_types": ["doc", "news"], "needs_link": true}
+{"id": "history-5", "question": "马刺上一次夺冠是哪一年？", "expected_facts": ["夺冠"], "expected_source_types": ["doc"], "needs_link": false}
+{"id": "compare-1", "question": "库里和魔术师约翰逊谁的历史地位更高？", "expected_facts": ["对比"], "expected_source_types": ["doc", "news"], "needs_link": true}
+{"id": "compare-2", "question": "约基奇和恩比德谁更强？", "expected_facts": ["对比"], "expected_source_types": ["doc", "news"], "needs_link": true}
+{"id": "compare-3", "question": "詹姆斯和乔丹的生涯荣誉对比。", "expected_facts": ["荣誉"], "expected_source_types": ["doc"], "needs_link": false}
+{"id": "compare-4", "question": "东契奇和特雷杨谁更适合建队？", "expected_facts": ["对比"], "expected_source_types": ["doc", "news"], "needs_link": true}
+{"id": "video-1", "question": "找几个库里的三分集锦。", "expected_facts": ["集锦"], "expected_source_types": ["video"], "needs_link": true}
+{"id": "video-2", "question": "约基奇本赛季的助攻集锦。", "expected_facts": ["集锦"], "expected_source_types": ["video"], "needs_link": true}
+{"id": "video-3", "question": "2016 年总决赛抢七的集锦。", "expected_facts": ["集锦"], "expected_source_types": ["video"], "needs_link": true}
+{"id": "rules-1", "question": "NBA 三分线有多远？", "expected_facts": ["三分线"], "expected_source_types": ["doc"], "needs_link": false}
+{"id": "rules-2", "question": "什么是罗斯条款？", "expected_facts": ["罗斯条款"], "expected_source_types": ["doc"], "needs_link": false}
+{"id": "rules-3", "question": "附加赛的规则是什么？", "expected_facts": ["附加赛"], "expected_source_types": ["doc"], "needs_link": false}

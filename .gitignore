@@ -9,6 +9,7 @@ data/profile.json
 data/cache.db
 .superpowers/
 .streamlit/secrets.toml
+eval/report.md
 build/
 dist/
 *.egg-info/
