@@ -1,7 +1,7 @@
 import json
 from collections.abc import AsyncIterator
 
-from fastapi import Depends, FastAPI, Request
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
@@ -14,7 +14,7 @@ from app.models import ChatRequest, ChatResponse, UserProfile
 from app.services.cache import Cache
 from app.services.chat_service import ChatService
 from app.services.profile import ProfileStore
-from app.tools.fetch import fetch_page
+from app.tools.fetch import fetch_page_tool
 from app.tools.local_rag import local_rag
 from app.tools.search import TavilySearchProvider, news_search, video_search
 
@@ -22,7 +22,7 @@ profile_store = ProfileStore(settings.profile_path)
 _service: ChatService | None = None
 
 
-def build_default_service() -> ChatService:
+def build_default_service(use_cache: bool = True) -> ChatService:
     llm = OpenAICompatibleLLM(
         settings.llm_api_key,
         settings.llm_base_url,
@@ -37,15 +37,24 @@ def build_default_service() -> ChatService:
         "local_rag": local_rag,
         "search_news": lambda q: news_search(provider, q) if provider else [],
         "search_videos": lambda q: video_search(provider, q) if provider else [],
-        "fetch_page": fetch_page,
+        "fetch_page": fetch_page_tool,
     }
-    return ChatService(build_graph(llm, tools), Cache(settings.cache_path))
+    return ChatService(
+        build_graph(llm, tools),
+        Cache(settings.cache_path) if use_cache else None,
+    )
 
 
 def get_chat_service() -> ChatService:
     global _service
     if _service is None:
-        _service = build_default_service()
+        try:
+            _service = build_default_service()
+        except Exception as exc:
+            raise HTTPException(
+                status_code=503,
+                detail=f"服务未配置：{exc}",
+            ) from exc
     return _service
 
 

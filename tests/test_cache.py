@@ -29,6 +29,25 @@ def test_chat_service_uses_cache(fake_llm, fake_tools, tmp_path):
     assert second.cached is True
 
 
+def test_cache_not_used_for_multiturn(fake_llm, fake_tools, tmp_path):
+    from app.agent.graph import build_graph
+    from app.models import ChatRequest, ChatTurn
+    from app.services.cache import Cache
+    from app.services.chat_service import ChatService
+
+    graph = build_graph(fake_llm, fake_tools)
+    service = ChatService(graph, Cache(tmp_path / "cache.db"))
+    history = [ChatTurn(role="user", content="库里")]
+    first = service.answer(
+        ChatRequest(question="他上一场得了多少分？", history=history)
+    )
+    second = service.answer(
+        ChatRequest(question="他上一场得了多少分？", history=history)
+    )
+    assert first.cached is False
+    assert second.cached is False
+
+
 def test_rate_limit_returns_429(fake_service):
     from fastapi.testclient import TestClient
 

@@ -25,6 +25,7 @@ class EvalReport:
     total: int = 0
     retrieval_hit_rate: float = 0.0
     citation_coverage: float = 0.0
+    fact_hit_rate: float = 0.0
     link_validity: float = 0.0
     p95_latency_ms: float = 0.0
     avg_cost_cny: float = 0.0
@@ -37,6 +38,7 @@ class EvalReport:
             f"- total: {self.total}",
             f"- retrieval_hit_rate: {self.retrieval_hit_rate:.3f}",
             f"- citation_coverage: {self.citation_coverage:.3f}",
+            f"- fact_hit_rate: {self.fact_hit_rate:.3f}",
             f"- link_validity: {self.link_validity:.3f}",
             f"- p95_latency_ms: {self.p95_latency_ms:.1f}",
             f"- avg_cost_cny: {self.avg_cost_cny:.4f}",
@@ -64,6 +66,7 @@ def evaluate(questions: list[EvalQuestion], chat_service) -> EvalReport:
 
     hits = 0
     citations = 0
+    facts_hit = 0
     valid_links = 0
     total_links = 0
     latencies: list[float] = []
@@ -78,9 +81,18 @@ def evaluate(questions: list[EvalQuestion], chat_service) -> EvalReport:
         hits += 1 if _hit(question, response) else 0
         cited = bool(re.search(r"\[\d+\]", response.answer)) and bool(response.sources)
         citations += 1 if cited else 0
+        text = response.answer + " " + " ".join(
+            source.snippet or "" for source in response.sources
+        )
+        if not question.expected_facts or all(
+            fact in text for fact in question.expected_facts
+        ):
+            facts_hit += 1
+        if question.needs_link and not response.sources:
+            total_links += 1
         for source in response.sources:
             total_links += 1
-            if source.url.startswith("http"):
+            if source.link_status != "dead":
                 valid_links += 1
         costs.extend(step.cost_cny for step in response.trace)
         rows.append(
@@ -99,6 +111,7 @@ def evaluate(questions: list[EvalQuestion], chat_service) -> EvalReport:
         total=len(questions),
         retrieval_hit_rate=hits / len(questions),
         citation_coverage=citations / len(questions),
+        fact_hit_rate=facts_hit / len(questions),
         link_validity=(valid_links / total_links) if total_links else 1.0,
         p95_latency_ms=sorted_latencies[p95_index],
         avg_cost_cny=(sum(costs) / len(questions)) if costs else 0.0,
@@ -148,7 +161,7 @@ def main() -> None:
     else:
         from app.main import build_default_service
 
-        service = build_default_service()
+        service = build_default_service(use_cache=False)
 
     report = evaluate(questions, service)
     Path("eval").mkdir(exist_ok=True)

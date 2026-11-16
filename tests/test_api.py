@@ -16,3 +16,20 @@ def test_profile_roundtrip(client):
 
 def test_chat_endpoint_rejects_empty_question(client):
     assert client.post("/api/chat", json={"question": "   "}).status_code == 422
+
+
+def test_chat_without_config_returns_503(monkeypatch):
+    from fastapi.testclient import TestClient
+
+    import app.main as main
+
+    def boom():
+        raise RuntimeError("LLM_API_KEY missing")
+
+    monkeypatch.setattr(main, "_service", None)
+    monkeypatch.setattr(main, "build_default_service", boom)
+    response = TestClient(main.create_app()).post(
+        "/api/chat", json={"question": "库里"}
+    )
+    assert response.status_code == 503
+    assert "服务未配置" in response.json()["detail"]

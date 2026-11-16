@@ -14,6 +14,11 @@ class FakeLLM:
         return "answer [1]"
 
 
+@pytest.fixture(autouse=True)
+def _fast_link_check(monkeypatch):
+    monkeypatch.setattr("app.agent.nodes.is_link_alive", lambda url: True)
+
+
 @pytest.fixture
 def fake_llm():
     llm = FakeLLM()
@@ -79,6 +84,7 @@ def fake_service():
                         url="https://example.com",
                         site="example",
                         type="news",
+                        snippet="交易",
                     )
                 ],
                 trace=[],

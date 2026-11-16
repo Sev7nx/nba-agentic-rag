@@ -32,3 +32,9 @@ def test_local_rag_returns_empty_when_index_missing(tmp_path, monkeypatch):
     monkeypatch.setenv("CHROMA_DIR", str(tmp_path / "missing"))
     monkeypatch.setattr("app.tools.local_rag.get_embedder", lambda: FakeEmbedder())
     assert local_rag("库里") == []
+
+
+def test_get_embedder_is_cached():
+    from app.tools.local_rag import get_embedder
+
+    assert get_embedder() is get_embedder()

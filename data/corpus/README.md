@@ -8,7 +8,19 @@ python scripts/ingest_corpus.py
 
 ## Markdown
 
-每个 `.md` 文件是一篇文档，第一行作为标题。适合规则、术语、比赛回顾等长文本。
+每个 `.md` 文件必须带 front matter，并提供 `url`；没有 `url` 的文件会被跳过（包括本 README）。适合规则、术语、比赛回顾等长文本。
+
+```markdown
+---
+url: https://example.com/curry
+title: 斯蒂芬·库里生涯概览
+source_type: doc
+entity_type: player
+entity_name: 库里
+date: 2026-01-01
+---
+正文……
+```
 
 ## JSON
 

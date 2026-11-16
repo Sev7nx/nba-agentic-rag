@@ -28,19 +28,46 @@ class Chunk:
     metadata: dict = field(default_factory=dict)
 
 
+def _parse_front_matter(text: str) -> tuple[dict, str]:
+    lines = text.splitlines()
+    if not lines or lines[0].strip() != "---":
+        return {}, text
+    meta: dict[str, str] = {}
+    body_start = None
+    for index, line in enumerate(lines[1:], start=1):
+        if line.strip() == "---":
+            body_start = index + 1
+            break
+        if ":" in line:
+            key, value = line.split(":", 1)
+            meta[key.strip()] = value.strip().strip('"').strip("'")
+    if body_start is None:
+        return {}, text
+    return meta, "\n".join(lines[body_start:])
+
+
 def load_documents(corpus_dir: Path) -> list[Document]:
     docs: list[Document] = []
     for path in sorted(corpus_dir.iterdir()):
         suffix = path.suffix.lower()
         if suffix == ".md":
-            text = path.read_text(encoding="utf-8")
-            first_line = text.splitlines()[0] if text else ""
+            raw = path.read_text(encoding="utf-8")
+            meta, body = _parse_front_matter(raw)
+            if path.stem.lower() == "readme" or not meta.get("url"):
+                continue
+            first_line = body.splitlines()[0] if body else ""
             docs.append(
                 Document(
-                    doc_id=path.stem,
-                    title=first_line.lstrip("# ").strip() or path.stem,
-                    url="",
-                    text=text,
+                    doc_id=meta.get("doc_id", path.stem),
+                    title=meta.get("title")
+                    or first_line.lstrip("# ").strip()
+                    or path.stem,
+                    url=meta["url"],
+                    text=body,
+                    source_type=meta.get("source_type", "doc"),
+                    entity_type=meta.get("entity_type", "unknown"),
+                    entity_name=meta.get("entity_name", ""),
+                    date=meta.get("date"),
                 )
             )
         elif suffix == ".json":

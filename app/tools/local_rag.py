@@ -1,4 +1,5 @@
 import os
+from functools import lru_cache
 from urllib.parse import urlparse
 
 from app.rag.embeddings import BGEEmbedder, Embedder
@@ -6,10 +7,12 @@ from app.rag.reranker import BGEReranker, Reranker
 from app.tools.base import SearchResult
 
 
+@lru_cache(maxsize=1)
 def get_embedder() -> Embedder:
     return BGEEmbedder()
 
 
+@lru_cache(maxsize=1)
 def get_reranker() -> Reranker:
     return BGEReranker()
 

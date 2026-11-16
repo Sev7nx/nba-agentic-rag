@@ -13,7 +13,7 @@ class ChatService:
     def answer(self, request: ChatRequest) -> ChatResponse:
         profile = request.profile.model_dump() if request.profile else {}
         cache_key = None
-        if self._cache:
+        if self._cache and not request.history:
             cache_key = self._cache.make_key(request.question, profile)
             cached = self._cache.get(cache_key)
             if cached:
@@ -42,7 +42,7 @@ class ChatService:
 
     async def stream(self, request: ChatRequest) -> AsyncIterator[ChatEvent]:
         try:
-            response = self.answer(request)
+            response = await asyncio.to_thread(self.answer, request)
         except Exception as exc:
             yield ChatEvent(type="error", data={"message": str(exc)})
             return

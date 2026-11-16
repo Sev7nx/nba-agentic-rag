@@ -19,12 +19,24 @@ def test_chunk_overlap_and_metadata():
 
 
 def test_load_documents_skips_unknown_files(tmp_path):
-    (tmp_path / "a.md").write_text("# 标题\n正文", encoding="utf-8")
+    (tmp_path / "a.md").write_text(
+        "---\nurl: https://example.com/a\nentity_name: 库里\n---\n# 标题\n正文",
+        encoding="utf-8",
+    )
     (tmp_path / "b.exe").write_bytes(b"x")
     from app.rag.ingest import load_documents
 
     docs = load_documents(tmp_path)
     assert len(docs) == 1
+    assert docs[0].url == "https://example.com/a"
+    assert docs[0].entity_name == "库里"
+
+
+def test_markdown_without_url_is_skipped(tmp_path):
+    (tmp_path / "c.md").write_text("# 标题\n正文", encoding="utf-8")
+    from app.rag.ingest import load_documents
+
+    assert load_documents(tmp_path) == []
 
 
 def test_build_index_with_fake_embedder(tmp_path):

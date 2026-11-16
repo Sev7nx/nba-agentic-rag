@@ -5,6 +5,7 @@ ANALYSIS_SYSTEM = """你是 NBA 问答助手的问题分析器。只输出 JSON�
 - time_sensitivity: latest | classic | none
 - language: zh | en
 - ambiguous: 实体是否有歧义（例如“库里”可能指斯蒂芬·库里或塞思·库里）
+- in_scope: 问题是否属于 NBA 领域（true/false）
 """
 
 PLAN_SYSTEM = """你是 NBA 问答助手的检索规划器。只输出 JSON，不要输出其他文字。

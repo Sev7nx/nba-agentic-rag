@@ -2,6 +2,8 @@ import html
 import json
 from collections.abc import Iterable, Iterator
 
+import httpx
+
 from app.models import ChatEvent, Source, TraceStep
 
 
@@ -42,6 +44,38 @@ def render_trace(trace: list[TraceStep]) -> str:
 
 def format_api_error(exc: Exception) -> str:
     return f"服务暂时不可用：{exc}。请确认 FastAPI 已启动，或稍后重试。"
+
+
+def load_profile(api_url: str) -> dict:
+    try:
+        response = httpx.get(f"{api_url.rstrip('/')}/api/profile", timeout=3.0)
+        response.raise_for_status()
+        data = response.json()
+        return {
+            "favorite_team": data.get("favorite_team"),
+            "favorite_players": data.get("favorite_players", []),
+        }
+    except Exception:
+        return {"favorite_team": None, "favorite_players": []}
+
+
+def save_profile(api_url: str, profile: dict) -> None:
+    try:
+        httpx.put(
+            f"{api_url.rstrip('/')}/api/profile",
+            json=profile,
+            timeout=3.0,
+        )
+    except Exception:
+        pass
+
+
+def build_history(messages: list[dict], limit: int = 10) -> list[dict]:
+    return [
+        {"role": message["role"], "content": message["content"]}
+        for message in messages[-limit:]
+        if message.get("content")
+    ]
 
 
 def parse_sse(lines: Iterable[str]) -> Iterator[ChatEvent]:

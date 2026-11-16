@@ -8,7 +8,15 @@ import httpx
 import streamlit as st
 
 from app.models import ChatEvent, Source, TraceStep
-from app.ui.components import format_api_error, parse_sse, render_sources, render_trace
+from app.ui.components import (
+    build_history,
+    format_api_error,
+    load_profile,
+    parse_sse,
+    render_sources,
+    render_trace,
+    save_profile,
+)
 
 st.set_page_config(page_title="NBA Scout", page_icon="🏀", layout="wide")
 
@@ -17,21 +25,30 @@ api_url = os.getenv("API_URL", "http://localhost:8000")
 if "messages" not in st.session_state:
     st.session_state.messages = []
 if "profile" not in st.session_state:
-    st.session_state.profile = {"favorite_team": None, "favorite_players": []}
+    st.session_state.profile = load_profile(api_url)
+
+PLAYERS = ["库里", "詹姆斯", "约基奇", "字母哥", "东契奇", "塔图姆", "杜兰特"]
 
 with st.sidebar:
     st.header("我的偏好")
     api_url = st.text_input("FastAPI 地址", value=api_url)
     teams = ["", "勇士", "湖人", "凯尔特人", "掘金", "雄鹿", "太阳", "独行侠"]
-    team = st.selectbox("主队", teams, index=0)
-    players = st.multiselect(
-        "喜欢的球员",
-        ["库里", "詹姆斯", "约基奇", "字母哥", "东契奇", "塔图姆", "杜兰特"],
-    )
+    current_team = st.session_state.profile.get("favorite_team") or ""
+    team_index = teams.index(current_team) if current_team in teams else 0
+    team = st.selectbox("主队", teams, index=team_index)
+    current_players = [
+        player
+        for player in st.session_state.profile.get("favorite_players", [])
+        if player in PLAYERS
+    ]
+    players = st.multiselect("喜欢的球员", PLAYERS, default=current_players)
     st.session_state.profile = {
         "favorite_team": team or None,
         "favorite_players": players,
     }
+    if st.button("保存偏好"):
+        save_profile(api_url, st.session_state.profile)
+        st.success("已保存")
     st.caption("偏好会影响检索排序，不会推送。")
 
 st.title("NBA Scout")
@@ -50,7 +67,7 @@ if question := st.chat_input("问一个 NBA 问题，比如：库里哪场比赛
 
     payload = {
         "question": question,
-        "history": st.session_state.messages[:-1][-10:],
+        "history": build_history(st.session_state.messages[:-1]),
         "profile": st.session_state.profile,
     }
     answer = ""
