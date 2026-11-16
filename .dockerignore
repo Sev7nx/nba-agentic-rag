@@ -1,0 +1,12 @@
+.venv
+.git
+.superpowers
+__pycache__
+*.pyc
+.pytest_cache
+data/chroma
+data/profile.json
+data/cache.db
+eval/report.md
+.env
+.env.local
