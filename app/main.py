@@ -1,20 +1,23 @@
 import json
 from collections.abc import AsyncIterator
 
-from fastapi import Depends, FastAPI
+from fastapi import Depends, FastAPI, Request
 from fastapi.responses import StreamingResponse
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
 
 from app.agent.graph import build_graph
 from app.config import settings
 from app.llm import OpenAICompatibleLLM
-from app.models import ChatEvent, ChatRequest, ChatResponse, UserProfile
+from app.models import ChatRequest, ChatResponse, UserProfile
+from app.services.cache import Cache
 from app.services.chat_service import ChatService
 from app.services.profile import ProfileStore
 from app.tools.fetch import fetch_page
 from app.tools.local_rag import local_rag
 from app.tools.search import TavilySearchProvider, news_search, video_search
 
-app = FastAPI(title="NBA Agentic RAG")
 profile_store = ProfileStore(settings.profile_path)
 _service: ChatService | None = None
 
@@ -36,7 +39,7 @@ def build_default_service() -> ChatService:
         "search_videos": lambda q: video_search(provider, q) if provider else [],
         "fetch_page": fetch_page,
     }
-    return ChatService(build_graph(llm, tools))
+    return ChatService(build_graph(llm, tools), Cache(settings.cache_path))
 
 
 def get_chat_service() -> ChatService:
@@ -48,19 +51,6 @@ def get_chat_service() -> ChatService:
 
 def get_profile_store() -> ProfileStore:
     return profile_store
-
-
-@app.get("/health")
-def health() -> dict[str, str]:
-    return {"status": "ok"}
-
-
-@app.post("/api/chat", response_model=ChatResponse)
-def chat(
-    request: ChatRequest,
-    service: ChatService = Depends(get_chat_service),
-) -> ChatResponse:
-    return service.answer(request)
 
 
 async def _event_stream(
@@ -76,26 +66,51 @@ async def _event_stream(
         yield f"event: error\ndata: {payload}\n\n"
 
 
-@app.post("/api/chat/stream")
-async def chat_stream(
-    request: ChatRequest,
-    service: ChatService = Depends(get_chat_service),
-) -> StreamingResponse:
-    return StreamingResponse(
-        _event_stream(service, request),
-        media_type="text/event-stream",
-    )
+def create_app(rate_limit: str | None = None) -> FastAPI:
+    limit = rate_limit or settings.rate_limit
+    limiter = Limiter(key_func=get_remote_address)
+    application = FastAPI(title="NBA Agentic RAG")
+    application.state.limiter = limiter
+    application.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+    @application.get("/health")
+    def health() -> dict[str, str]:
+        return {"status": "ok"}
+
+    @application.post("/api/chat", response_model=ChatResponse)
+    @limiter.limit(limit)
+    def chat(
+        request: Request,
+        payload: ChatRequest,
+        service: ChatService = Depends(get_chat_service),
+    ) -> ChatResponse:
+        return service.answer(payload)
+
+    @application.post("/api/chat/stream")
+    @limiter.limit(limit)
+    async def chat_stream(
+        request: Request,
+        payload: ChatRequest,
+        service: ChatService = Depends(get_chat_service),
+    ) -> StreamingResponse:
+        return StreamingResponse(
+            _event_stream(service, payload),
+            media_type="text/event-stream",
+        )
+
+    @application.get("/api/profile", response_model=UserProfile)
+    def get_profile(store: ProfileStore = Depends(get_profile_store)) -> UserProfile:
+        return store.get()
+
+    @application.put("/api/profile", response_model=UserProfile)
+    def put_profile(
+        profile: UserProfile,
+        store: ProfileStore = Depends(get_profile_store),
+    ) -> UserProfile:
+        store.save(profile)
+        return profile
+
+    return application
 
 
-@app.get("/api/profile", response_model=UserProfile)
-def get_profile(store: ProfileStore = Depends(get_profile_store)) -> UserProfile:
-    return store.get()
-
-
-@app.put("/api/profile", response_model=UserProfile)
-def put_profile(
-    profile: UserProfile,
-    store: ProfileStore = Depends(get_profile_store),
-) -> UserProfile:
-    store.save(profile)
-    return profile
+app = create_app()
