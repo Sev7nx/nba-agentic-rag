@@ -101,3 +101,51 @@ def client(fake_service, tmp_path):
     with TestClient(app) as test_client:
         yield test_client
     app.dependency_overrides.clear()
+
+
+@pytest.fixture
+def fake_streaming_service():
+    from app.models import ChatEvent
+
+    class FakeStreamingService:
+        async def stream(self, request):
+            yield ChatEvent(type="token", data={"text": "你"})
+            yield ChatEvent(type="sources", data={"sources": []})
+            yield ChatEvent(type="trace", data={"trace": []})
+            yield ChatEvent(type="done", data={})
+
+    return FakeStreamingService()
+
+
+@pytest.fixture
+def fake_failing_service():
+    class FakeFailingService:
+        async def stream(self, request):
+            raise RuntimeError("boom")
+            yield  # pragma: no cover
+
+    return FakeFailingService()
+
+
+@pytest.fixture
+def stream_client(fake_streaming_service):
+    from fastapi.testclient import TestClient
+
+    from app.main import app, get_chat_service
+
+    app.dependency_overrides[get_chat_service] = lambda: fake_streaming_service
+    with TestClient(app) as test_client:
+        yield test_client
+    app.dependency_overrides.clear()
+
+
+@pytest.fixture
+def failing_stream_client(fake_failing_service):
+    from fastapi.testclient import TestClient
+
+    from app.main import app, get_chat_service
+
+    app.dependency_overrides[get_chat_service] = lambda: fake_failing_service
+    with TestClient(app) as test_client:
+        yield test_client
+    app.dependency_overrides.clear()

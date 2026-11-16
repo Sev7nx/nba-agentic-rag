@@ -1,4 +1,7 @@
-from app.models import ChatRequest, ChatResponse, TraceStep
+import asyncio
+from collections.abc import AsyncIterator
+
+from app.models import ChatEvent, ChatRequest, ChatResponse, TraceStep
 
 
 class ChatService:
@@ -23,3 +26,25 @@ class ChatService:
             sources=result.get("sources") or [],
             trace=trace,
         )
+
+    async def stream(self, request: ChatRequest) -> AsyncIterator[ChatEvent]:
+        try:
+            response = self.answer(request)
+        except Exception as exc:
+            yield ChatEvent(type="error", data={"message": str(exc)})
+            return
+        for index in range(0, len(response.answer), 20):
+            yield ChatEvent(
+                type="token",
+                data={"text": response.answer[index : index + 20]},
+            )
+            await asyncio.sleep(0)
+        yield ChatEvent(
+            type="sources",
+            data={"sources": [source.model_dump() for source in response.sources]},
+        )
+        yield ChatEvent(
+            type="trace",
+            data={"trace": [step.model_dump() for step in response.trace]},
+        )
+        yield ChatEvent(type="done", data={"cached": response.cached})

@@ -1,9 +1,13 @@
+import json
+from collections.abc import AsyncIterator
+
 from fastapi import Depends, FastAPI
+from fastapi.responses import StreamingResponse
 
 from app.agent.graph import build_graph
 from app.config import settings
 from app.llm import OpenAICompatibleLLM
-from app.models import ChatRequest, ChatResponse, UserProfile
+from app.models import ChatEvent, ChatRequest, ChatResponse, UserProfile
 from app.services.chat_service import ChatService
 from app.services.profile import ProfileStore
 from app.tools.fetch import fetch_page
@@ -57,6 +61,30 @@ def chat(
     service: ChatService = Depends(get_chat_service),
 ) -> ChatResponse:
     return service.answer(request)
+
+
+async def _event_stream(
+    service: ChatService,
+    request: ChatRequest,
+) -> AsyncIterator[str]:
+    try:
+        async for event in service.stream(request):
+            payload = json.dumps(event.data, ensure_ascii=False)
+            yield f"event: {event.type}\ndata: {payload}\n\n"
+    except Exception as exc:
+        payload = json.dumps({"message": str(exc)}, ensure_ascii=False)
+        yield f"event: error\ndata: {payload}\n\n"
+
+
+@app.post("/api/chat/stream")
+async def chat_stream(
+    request: ChatRequest,
+    service: ChatService = Depends(get_chat_service),
+) -> StreamingResponse:
+    return StreamingResponse(
+        _event_stream(service, request),
+        media_type="text/event-stream",
+    )
 
 
 @app.get("/api/profile", response_model=UserProfile)
