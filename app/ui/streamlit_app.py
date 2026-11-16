@@ -88,6 +88,8 @@ if question := st.chat_input("问一个 NBA 问题，比如：库里哪场比赛
         except Exception as exc:
             st.error(format_api_error(exc))
 
+        if not answer and not sources:
+            st.info("没找到可靠来源，试试换个问法。")
         if sources:
             st.markdown(render_sources(sources), unsafe_allow_html=True)
         with st.expander("调试轨迹"):

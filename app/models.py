@@ -13,6 +13,7 @@ class Source(BaseModel):
     date: str | None = None
     type: Literal["news", "video", "doc"]
     snippet: str | None = None
+    link_status: str = "ok"
 
     @field_validator("url")
     @classmethod

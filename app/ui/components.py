@@ -11,21 +11,33 @@ def render_sources(sources: list[Source]) -> str:
     cards = []
     for source in sources:
         date = html.escape(source.date or "")
+        warning = " · 链接可能失效" if source.link_status == "dead" else ""
         cards.append(
             '<div class="source-card">'
             f'<a href="{html.escape(source.url)}" target="_blank">{html.escape(source.title)}</a>'
-            f'<span>{html.escape(source.site)} · {date}</span>'
+            f'<span>{html.escape(source.site)} · {date}{warning}</span>'
             "</div>"
         )
     return "\n".join(cards)
 
 
-def render_trace(trace: list[TraceStep]) -> str:
+def format_trace(trace: list[TraceStep]) -> str:
     if not trace:
         return "暂无调试信息"
-    return "\n".join(
-        f"- {step.name}: {step.detail} ({step.duration_ms}ms)" for step in trace
-    )
+    lines = []
+    for step in trace:
+        line = f"- {step.name}: {step.detail} ({step.duration_ms}ms"
+        if step.tokens:
+            line += f", {step.tokens} tokens"
+        if step.cost_cny:
+            line += f", ¥{step.cost_cny:.4f}"
+        line += ")"
+        lines.append(line)
+    return "\n".join(lines)
+
+
+def render_trace(trace: list[TraceStep]) -> str:
+    return format_trace(trace)
 
 
 def format_api_error(exc: Exception) -> str:

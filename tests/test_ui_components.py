@@ -1,5 +1,11 @@
 from app.models import Source, TraceStep
-from app.ui.components import format_api_error, parse_sse, render_sources, render_trace
+from app.ui.components import (
+    format_api_error,
+    format_trace,
+    parse_sse,
+    render_sources,
+    render_trace,
+)
 
 
 def test_render_sources_contains_links():
@@ -25,3 +31,28 @@ def test_parse_sse_returns_events():
 def test_render_trace_contains_steps():
     text = render_trace([TraceStep(name="plan", detail="3 tools", duration_ms=12)])
     assert "plan" in text and "3 tools" in text
+
+
+def test_format_trace_hides_empty():
+    assert "暂无" in format_trace([])
+
+
+def test_format_trace_contains_steps():
+    text = format_trace([TraceStep(name="plan", detail="3 tools", duration_ms=12)])
+    assert "plan" in text and "3 tools" in text
+
+
+def test_render_sources_marks_dead_link():
+    html = render_sources(
+        [
+            Source(
+                id=1,
+                title="t",
+                url="https://example.com",
+                site="x",
+                type="news",
+                link_status="dead",
+            )
+        ]
+    )
+    assert "链接可能失效" in html
