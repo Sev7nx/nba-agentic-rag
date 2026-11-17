@@ -15,6 +15,7 @@ data/nbadb.duckdb
 data/nba_docs
 data/docs
 data/extra
+data/current
 data/stats.sqlite
 data/qdrant
 eval/report.md

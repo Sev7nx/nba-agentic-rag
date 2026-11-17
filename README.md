@@ -34,6 +34,7 @@ LangGraph Agent
 - Agent 规划：最多 4 个工具调用、2 轮检索
 - 多源检索：结构化统计、今日比分、新闻、视频、网页正文
 - 结构化数据精确查询：球员赛季/生涯、球队战绩、奖项、得分王；数字走 SQL，不做向量检索
+- 当前赛季每日刷新：ESPN 球员数据 + Kaggle TeamStatistics，自动更新 `as_of`
 - 今日比赛/实时比分：`nba_api.live`，30 秒缓存
 - 文档 RAG：Chroma + BGE-small-zh，按文档类型过滤 + 实体加权；可切 BGE-M3 / BGE-reranker
 - 证据去重、来源质量评分、结构化证据优先、BGE 重排（可选）
@@ -80,7 +81,7 @@ TAVILY_API_KEY=你的 Tavily key
 STATS_AS_OF=2026-11-01
 ```
 
-`STATS_AS_OF` 要和 `data/stats.sqlite` 的数据截止日一致；重建数据后记得更新。
+`STATS_AS_OF` 是历史快照的回退日期；`refresh_stats.py` 会把最新截止日写进 `stats.sqlite` 的 `meta` 表，通常不用手动改。
 
 ### 3. 准备结构化数据
 
@@ -92,6 +93,22 @@ python scripts/build_stats_db.py
 ```
 
 生成 `data/stats.sqlite`。需要先配置 Kaggle CLI（`~/.kaggle/kaggle.json`）。
+
+### 3.1 刷新当前赛季
+
+sumitrodatta 快照最后更新是 2026-11-01；当前赛季用 ESPN 球员数据 + 每日更新的 [TeamStatistics](https://www.kaggle.com/datasets/eoinamoore/historical-nba-data-and-player-box-scores) 覆盖到最近比赛日：
+
+```bash
+python scripts/refresh_stats.py --skip-download
+```
+
+第一次运行会下载约 35MB 的 `TeamStatistics.csv`；之后可以用 `--skip-download` 使用缓存，或：
+
+```bash
+python scripts/refresh_stats.py --refresh
+```
+
+脚本会更新 `data/stats.sqlite` 里 2026-27 的球员/球队行，并把实际截止日写进 `meta.as_of`；回答里的「数据截至」会自动跟着变。
 
 ### 4. 构建文档索引
 
@@ -178,18 +195,18 @@ docs/                设计文档和实现计划
 ## 设计取舍（面试可以讲）
 
 - **为什么 Agentic RAG，而不是普通 RAG**：问题需要多源路由（结构化数据 / 新闻 / 视频 / 文档），还要在证据不足时改写查询重试。普通 RAG 只做一次检索，覆盖不了这种问题。
-- **为什么不把数字做成向量**：场均 29.2 分这种精确值需要 SQL 计算和聚合，向量检索只能找到「提到过数字的段落」，既不准也难更新。数字走 SQL，解释类内容走向量，最后合并证据。
+- **为什么不把数字做成向量**：场均得分这种精确值需要 SQL 计算和聚合，向量检索只能找到「提到过数字的段落」，既不准也难更新。数字走 SQL，解释类内容走向量，最后合并证据。
 - **为什么用 LangGraph**：状态机显式、可调试，后续可以加 Planner/Critic 演进到多 Agent。
 - **检索质量**：切块 + 元数据（doc_type/来源/日期）+ 向量检索 + doc_type 过滤 + 实体加权 + 可选 BGE 重排 + 来源质量评分。
 - **防幻觉**：每个关键事实带引用；没有来源就明确说没找到；自检不过最多重试一次。
 - **成本与延迟**：缓存、并行工具、最多 4 次调用 / 2 轮检索、便宜模型。
-- **评测**：20 题评测集 + 自动指标，而不是「我觉得挺好」。
+- **评测**：24 题评测集 + 自动指标，而不是「我觉得挺好」。
 
 ## 已知限制
 
-- 结构化数据来自 Kaggle 快照，`STATS_AS_OF` 之前的赛季数据是精确的；之后的比赛以 `live_query` 或最新新闻为准。
+- 历史数据来自 sumitrodatta 快照（最后更新 2026-11-01）；当前赛季由 `refresh_stats.py` 从 ESPN + Kaggle TeamStatistics 刷新，通常比当天晚 1–2 天，今天/进行中的比赛用 `live_query`。
 - 今日比分来自 `nba_api.live`；NBA 官方 stats 接口在部分网络会被 Akamai 拦截，所以历史统计用离线快照，不依赖在线 stats 接口。
-- nbadb 的 Kaggle 版本是原始 16 表、数据只到 2023，暂未作为主数据源；当前赛季统计以 sumitrodatta 快照为准。
+- nbadb 的 Kaggle 版本是原始 16 表、数据只到 2023，暂未作为主数据源；历史统计以 sumitrodatta 为底，当前赛季由 `refresh_stats.py` 覆盖。
 - 单用户，无登录；公网 demo 需要限流。
 - 文档索引需要先用 Tavily 抓取语料并重建；首次运行会下载 BGE 模型。
 - 视频搜索优先 B站；YouTube 作为回退，国内网络可能不可达。

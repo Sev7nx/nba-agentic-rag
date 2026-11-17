@@ -14,14 +14,9 @@ from app.tools.id_resolver import (
 
 SOURCE_URL = "https://www.kaggle.com/datasets/sumitrodatta/nba-aba-baa-stats"
 SOURCE_SITE = "kaggle.com"
-
-
-def _as_of() -> str:
-    return settings.stats_as_of
-
-
-def _stamp(snippet: str) -> str:
-    return f"数据截至 {_as_of()}。{snippet}"
+ESPN_STATS_URL = "https://www.espn.com/nba/stats"
+ESPN_STANDINGS_URL = "https://www.espn.com/nba/standings"
+ESPN_SITE = "espn.com"
 
 
 def _norm(value) -> str:
@@ -66,6 +61,27 @@ class StatsDB:
             "SELECT MAX(season) FROM player_per_game"
         ).fetchone()
         return int(row[0]) if row and row[0] is not None else 2027
+
+    def as_of(self) -> str:
+        try:
+            row = self._connect().execute(
+                "SELECT value FROM meta WHERE key='as_of'"
+            ).fetchone()
+            if row and row[0]:
+                return str(row[0])
+        except Exception:
+            pass
+        return settings.stats_as_of
+
+    def _stamp(self, snippet: str) -> str:
+        return f"数据截至 {self.as_of()}。{snippet}"
+
+    def _source(self, season: int, team: bool = False) -> tuple[str, str]:
+        if season == self.current_season():
+            if team:
+                return ESPN_STANDINGS_URL, ESPN_SITE
+            return ESPN_STATS_URL, ESPN_SITE
+        return SOURCE_URL, SOURCE_SITE
 
     def _season_label(self, season: int) -> str:
         return f"{season - 1}-{str(season)[-2:]}"
@@ -131,16 +147,24 @@ class StatsDB:
             f"罚球 {_fmt(row['ft_percent'], scale=100)}%",
         ]
         if advanced is not None:
-            parts.append(
-                f"TS% {_fmt(advanced['ts_percent'], scale=100)}%、"
-                f"PER {_fmt(advanced['per'])}、WS {_fmt(advanced['ws'])}"
-            )
+            advanced_parts = []
+            if advanced["ts_percent"] is not None:
+                advanced_parts.append(
+                    f"TS% {_fmt(advanced['ts_percent'], scale=100)}%"
+                )
+            if advanced["per"] is not None:
+                advanced_parts.append(f"PER {_fmt(advanced['per'])}")
+            if advanced["ws"] is not None:
+                advanced_parts.append(f"WS {_fmt(advanced['ws'])}")
+            if advanced_parts:
+                parts.append("；".join(advanced_parts))
+        url, site = self._source(season)
         return SearchResult(
             title=f"{row['player']} {label} 赛季数据",
-            url=SOURCE_URL,
-            site=SOURCE_SITE,
-            snippet=_stamp(" ".join(parts)),
-            published_date=_as_of(),
+            url=url,
+            site=site,
+            snippet=self._stamp(" ".join(parts)),
+            published_date=self.as_of(),
             result_type="stats",
         )
 
@@ -176,8 +200,8 @@ class StatsDB:
             title=f"{name} 生涯数据",
             url=SOURCE_URL,
             site=SOURCE_SITE,
-            snippet=_stamp(snippet),
-            published_date=_as_of(),
+            snippet=self._stamp(snippet),
+            published_date=self.as_of(),
             result_type="stats",
         )
 
@@ -196,12 +220,13 @@ class StatsDB:
             f"防守效率 {_fmt(row['d_rtg'])}，净效率 {_fmt(row['n_rtg'])}，"
             f"节奏 {_fmt(row['pace'])}"
         )
+        url, site = self._source(season, team=True)
         return SearchResult(
             title=f"{row['team']} {label} 战绩",
-            url=SOURCE_URL,
-            site=SOURCE_SITE,
-            snippet=_stamp(snippet),
-            published_date=_as_of(),
+            url=url,
+            site=site,
+            snippet=self._stamp(snippet),
+            published_date=self.as_of(),
             result_type="stats",
         )
 
@@ -218,12 +243,13 @@ class StatsDB:
             f"{index + 1}. {row['team']} {int(row['w'] or 0)}-{int(row['l'] or 0)}"
             for index, row in enumerate(rows)
         ]
+        url, site = self._source(season, team=True)
         return SearchResult(
             title=f"{label} 球队战绩前 8",
-            url=SOURCE_URL,
-            site=SOURCE_SITE,
-            snippet=_stamp("；".join(parts)),
-            published_date=_as_of(),
+            url=url,
+            site=site,
+            snippet=self._stamp("；".join(parts)),
+            published_date=self.as_of(),
             result_type="stats",
         )
 
@@ -265,8 +291,8 @@ class StatsDB:
             title=f"{player_name} 荣誉",
             url=SOURCE_URL,
             site=SOURCE_SITE,
-            snippet=_stamp("；".join(parts[:10])),
-            published_date=_as_of(),
+            snippet=self._stamp("；".join(parts[:10])),
+            published_date=self.as_of(),
             result_type="stats",
         )
 
@@ -292,12 +318,13 @@ class StatsDB:
             f"{index + 1}. {row['player']}（{row['team']}）{_fmt(row['value'])}"
             for index, row in enumerate(rows)
         ]
+        url, site = self._source(season)
         return SearchResult(
             title=f"{label} {metric}榜前 5",
-            url=SOURCE_URL,
-            site=SOURCE_SITE,
-            snippet=_stamp("；".join(parts)),
-            published_date=_as_of(),
+            url=url,
+            site=site,
+            snippet=self._stamp("；".join(parts)),
+            published_date=self.as_of(),
             result_type="stats",
         )
 

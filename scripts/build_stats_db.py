@@ -36,6 +36,7 @@ def season_label(season) -> str:
 def main() -> None:
     OUT.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(OUT)
+    conn.execute("DROP TABLE IF EXISTS meta")
     for table, filename in TABLES.items():
         df = pd.read_csv(BASE / filename)
         if "player" in df.columns:
