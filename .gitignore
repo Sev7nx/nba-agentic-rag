@@ -8,6 +8,7 @@ data/chroma/
 data/profile.json
 data/cache.db
 data/nba.sqlite
+data/nba.sqlite.kaggle-partial
 data/nbadb.sqlite
 data/nba.duckdb
 data/nbadb.duckdb
