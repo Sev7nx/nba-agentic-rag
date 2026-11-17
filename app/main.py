@@ -16,6 +16,7 @@ from app.services.chat_service import ChatService
 from app.services.profile import ProfileStore
 from app.tools.fetch import fetch_page_tool
 from app.tools.local_rag import local_rag
+from app.tools.nba_live import live_query
 from app.tools.search import TavilySearchProvider, news_search, video_search
 
 profile_store = ProfileStore(settings.profile_path)
@@ -38,6 +39,7 @@ def build_default_service(use_cache: bool = True) -> ChatService:
         "search_news": lambda q: news_search(provider, q) if provider else [],
         "search_videos": lambda q: video_search(provider, q) if provider else [],
         "fetch_page": fetch_page_tool,
+        "live_query": live_query,
     }
     return ChatService(
         build_graph(llm, tools),

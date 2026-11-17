@@ -214,6 +214,41 @@ def test_plan_tools_drops_fetch_page_without_url():
     assert out["plan"] == []
 
 
+def test_tool_names_include_live_query():
+    from app.agent.nodes import TOOL_NAMES
+
+    assert "live_query" in TOOL_NAMES
+
+
+def test_plan_tools_accepts_live_query():
+    state = {
+        "question": "今天有什么比赛",
+        "analysis": {
+            "entities": [],
+            "intent": "news",
+            "time_sensitivity": "latest",
+            "language": "zh",
+        },
+        "history": [],
+        "profile": {},
+    }
+    out = plan_tools(
+        state,
+        FakeLLM(
+            {
+                "plan": [
+                    {
+                        "tool": "live_query",
+                        "query": "今天比赛",
+                        "reason": "live",
+                    }
+                ]
+            }
+        ),
+    )
+    assert out["plan"][0]["tool"] == "live_query"
+
+
 def test_synthesize_falls_back_on_llm_error():
     state = {
         "question": "库里",

@@ -11,7 +11,7 @@ class SearchResult(BaseModel):
     site: str
     snippet: str = ""
     published_date: str | None = None
-    result_type: Literal["news", "video", "doc"]
+    result_type: Literal["news", "video", "doc", "live"]
 
     @field_validator("url")
     @classmethod

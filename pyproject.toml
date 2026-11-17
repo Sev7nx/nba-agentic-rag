@@ -17,6 +17,7 @@ dependencies = [
     "streamlit>=1.37",
     "langgraph>=0.2",
     "openai>=1.40",
+    "nba-api>=1.11",
     "chromadb>=0.5",
     "tavily-python>=0.5",
     "slowapi>=0.1.9",

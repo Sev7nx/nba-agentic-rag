@@ -13,6 +13,7 @@ PLAN_SYSTEM = """你是 NBA 问答助手的检索规划器。只输出 JSON，�
 - local_rag: 查本地知识库（球员资料、球队历史、经典比赛、规则）
 - search_news: 查新闻和转会消息（虎扑、腾讯体育、NBA 官方、ESPN）
 - search_videos: 查视频集锦（B站、YouTube）
+- live_query: 今日比赛、实时比分、正在进行的比赛
 - fetch_page: 读取排名靠前的网页正文
 输出格式：{"plan": [{"tool": "...", "query": "...", "reason": "..."}]}
 最新新闻用 search_news；经典比赛/历史用 local_rag + search_videos；不确定时先用 local_rag。

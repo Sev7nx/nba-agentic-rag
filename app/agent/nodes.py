@@ -12,7 +12,7 @@ from app.models import Source
 from app.tools.base import SearchResult
 from app.tools.fetch import is_link_alive
 
-TOOL_NAMES = {"local_rag", "search_news", "search_videos", "fetch_page"}
+TOOL_NAMES = {"local_rag", "search_news", "search_videos", "fetch_page", "live_query"}
 
 
 class Analysis(BaseModel):

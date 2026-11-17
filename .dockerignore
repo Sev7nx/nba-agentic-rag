@@ -7,6 +7,12 @@ __pycache__
 data/chroma
 data/profile.json
 data/cache.db
+data/nba.sqlite
+data/nbadb.sqlite
+data/nba.duckdb
+data/nbadb.duckdb
+data/nba_docs
+data/qdrant
 eval/report.md
 .env
 .env.local
