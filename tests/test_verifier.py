@@ -14,6 +14,30 @@ def test_grade_evidence_dedupes_urls():
     assert len(out["evidence"]) == 1
 
 
+def test_grade_evidence_prefers_stats_over_news():
+    state = {
+        "analysis": {"entities": []},
+        "tool_results": [
+            {
+                "title": "news",
+                "url": "https://espn.com/story",
+                "site": "espn.com",
+                "snippet": "story",
+                "result_type": "news",
+            },
+            {
+                "title": "stats leaderboard",
+                "url": "https://kaggle.com/dataset",
+                "site": "kaggle.com",
+                "snippet": "leader",
+                "result_type": "stats",
+            },
+        ],
+    }
+    out = grade_evidence(state)
+    assert out["evidence"][0]["title"] == "stats leaderboard"
+
+
 def test_verify_fails_without_citations():
     state = {"answer": "库里很强。", "sources": []}
     assert verify(state)["verified"] is False
@@ -90,6 +114,31 @@ def test_check_links_marks_only_dead():
     ]
     checked = check_links(sources, checker=lambda url: not url.startswith("https://b"))
     assert [source.link_status for source in checked] == ["ok", "dead"]
+
+
+def test_check_links_skips_local_sources():
+    sources = [
+        Source(
+            id=1,
+            title="stats",
+            url="https://kaggle.com/dataset",
+            site="kaggle.com",
+            type="stats",
+        ),
+        Source(
+            id=2,
+            title="live",
+            url="https://cdn.nba.com/scoreboard",
+            site="nba.com",
+            type="live",
+        ),
+    ]
+    checked_urls = []
+    checked = check_links(
+        sources, checker=lambda url: checked_urls.append(url) or False
+    )
+    assert checked_urls == []
+    assert all(source.link_status == "ok" for source in checked)
 
 
 def test_verify_fails_when_all_links_dead():

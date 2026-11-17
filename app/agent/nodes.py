@@ -11,8 +11,16 @@ from app.llm import LLMClient
 from app.models import Source
 from app.tools.base import SearchResult
 from app.tools.fetch import is_link_alive
+from app.tools.id_resolver import PLAYER_ALIASES, TEAM_ALIASES
 
-TOOL_NAMES = {"local_rag", "search_news", "search_videos", "fetch_page", "live_query"}
+TOOL_NAMES = {
+    "local_rag",
+    "search_news",
+    "search_videos",
+    "fetch_page",
+    "live_query",
+    "stats_query",
+}
 
 
 class Analysis(BaseModel):
@@ -78,6 +86,11 @@ def analyze_query(state: AgentState, llm: LLMClient) -> dict:
     start = time.perf_counter()
     try:
         analysis = llm.chat_json(ANALYSIS_SYSTEM, user, Analysis)
+        if analysis.ambiguous and any(
+            entity in PLAYER_ALIASES or entity in TEAM_ALIASES
+            for entity in analysis.entities
+        ):
+            analysis.ambiguous = False
     except Exception:
         analysis = Analysis(intent="other")
     duration_ms = int((time.perf_counter() - start) * 1000)
@@ -230,10 +243,13 @@ def execute_tools(state: AgentState, tools: dict) -> dict:
 def check_links(sources: list[Source], checker=None) -> list[Source]:
     if not sources:
         return []
+    targets = [source for source in sources if source.type not in {"stats", "live"}]
+    if not targets:
+        return sources
     check = checker or is_link_alive
-    with ThreadPoolExecutor(max_workers=min(4, len(sources))) as pool:
-        statuses = list(pool.map(lambda source: check(source.url), sources))
-    for source, alive in zip(sources, statuses):
+    with ThreadPoolExecutor(max_workers=min(4, len(targets))) as pool:
+        statuses = list(pool.map(lambda source: check(source.url), targets))
+    for source, alive in zip(targets, statuses):
         source.link_status = "ok" if alive else "dead"
     return sources
 
@@ -260,7 +276,7 @@ def synthesize(state: AgentState, llm: LLMClient) -> dict:
     sources = check_links(sources)
 
     context = "\n".join(
-        f"[{source.id}] {source.title}: {source.snippet or ''}" for source in sources[:6]
+        f"[{item.id}] {item.title}: {item.snippet or ''}" for item in sources[:8]
     )
     start = time.perf_counter()
     try:
@@ -300,6 +316,8 @@ SOURCE_QUALITY = {
     "youtube.com": 0.6,
 }
 
+TYPE_BONUS = {"stats": 0.8, "live": 0.5, "doc": 0.1}
+
 
 def _as_dict(item) -> dict:
     return item.model_dump() if hasattr(item, "model_dump") else item
@@ -335,8 +353,16 @@ def grade_evidence(state: AgentState) -> dict:
         entity_bonus = 0.1 if any(entity in text for entity in entities) else 0.0
         recency_bonus = 0.05 if data.get("published_date") else 0.0
         profile_bonus = 0.1 if any(favorite in text for favorite in favorites) else 0.0
+        type_bonus = TYPE_BONUS.get(data.get("result_type"), 0.0)
         ranked.append(
-            (_quality(url) + entity_bonus + recency_bonus + profile_bonus, data)
+            (
+                _quality(url)
+                + type_bonus
+                + entity_bonus
+                + recency_bonus
+                + profile_bonus,
+                data,
+            )
         )
     ranked.sort(key=lambda item: item[0], reverse=True)
     return {"evidence": [data for _, data in ranked[:8]]}

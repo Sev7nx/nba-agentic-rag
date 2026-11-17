@@ -11,7 +11,7 @@ class Source(BaseModel):
     url: str
     site: str
     date: str | None = None
-    type: Literal["news", "video", "doc", "live"]
+    type: Literal["news", "video", "doc", "live", "stats"]
     snippet: str | None = None
     link_status: str = "ok"
 

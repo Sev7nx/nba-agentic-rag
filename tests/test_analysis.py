@@ -80,6 +80,23 @@ def test_plan_tools_rejects_unknown_tool():
 
 
 def test_analysis_marks_ambiguous_entity():
+    state = {"question": "格林最近怎么样", "history": [], "profile": {}}
+    out = analyze_query(
+        state,
+        FakeLLM(
+            {
+                "entities": ["格林"],
+                "intent": "news",
+                "time_sensitivity": "latest",
+                "language": "zh",
+                "ambiguous": True,
+            }
+        ),
+    )
+    assert out["analysis"]["ambiguous"] is True
+
+
+def test_alias_clears_ambiguous_flag():
     state = {"question": "库里最近怎么样", "history": [], "profile": {}}
     out = analyze_query(
         state,
@@ -93,7 +110,7 @@ def test_analysis_marks_ambiguous_entity():
             }
         ),
     )
-    assert out["analysis"]["ambiguous"] is True
+    assert out["analysis"]["ambiguous"] is False
 
 
 def test_analyze_query_includes_history():
@@ -218,6 +235,41 @@ def test_tool_names_include_live_query():
     from app.agent.nodes import TOOL_NAMES
 
     assert "live_query" in TOOL_NAMES
+
+
+def test_tool_names_include_stats_query():
+    from app.agent.nodes import TOOL_NAMES
+
+    assert "stats_query" in TOOL_NAMES
+
+
+def test_plan_tools_accepts_stats_query():
+    state = {
+        "question": "库里本赛季场均多少分",
+        "analysis": {
+            "entities": ["库里"],
+            "intent": "stats",
+            "time_sensitivity": "latest",
+            "language": "zh",
+        },
+        "history": [],
+        "profile": {},
+    }
+    out = plan_tools(
+        state,
+        FakeLLM(
+            {
+                "plan": [
+                    {
+                        "tool": "stats_query",
+                        "query": "库里 2026-27 场均",
+                        "reason": "structured stats",
+                    }
+                ]
+            }
+        ),
+    )
+    assert out["plan"][0]["tool"] == "stats_query"
 
 
 def test_plan_tools_accepts_live_query():

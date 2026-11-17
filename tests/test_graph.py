@@ -126,9 +126,10 @@ def test_ambiguous_entity_asks_for_clarification(fake_llm, fake_tools):
     calls = []
     fake_tools["local_rag"] = lambda q: calls.append(q) or []
     fake_llm.payload["ambiguous"] = True
+    fake_llm.payload["entities"] = ["格林"]
     graph = build_graph(fake_llm, fake_tools)
     out = graph.invoke(
-        {"question": "库里最近怎么样", "history": [], "profile": {}, "rounds": 0}
+        {"question": "格林最近怎么样", "history": [], "profile": {}, "rounds": 0}
     )
     assert not calls
     assert "哪位" in out["answer"]
