@@ -71,3 +71,14 @@ def test_fetch_page_tool_rejects_non_url():
     from app.tools.fetch import fetch_page_tool
 
     assert fetch_page_tool("库里最经典的比赛") == []
+
+def test_is_link_alive_accepts_bot_block(monkeypatch):
+    import httpx
+
+    class FakeResponse:
+        status_code = 403
+
+    monkeypatch.setattr(httpx, "head", lambda *args, **kwargs: FakeResponse())
+    assert is_link_alive(
+        "https://baike.baidu.com/item/x", url_checker=lambda url: True
+    )

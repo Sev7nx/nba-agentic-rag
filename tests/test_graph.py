@@ -19,7 +19,7 @@ def test_execute_tools_skips_failed_tool(fake_llm, fake_tools):
 
 def test_graph_respects_max_tool_calls(fake_llm, fake_tools):
     fake_llm.payload["plan"] = [
-        {"tool": "local_rag", "query": "x", "reason": "r"}
+        {"tool": "doc_search", "query": "x", "reason": "r"}
     ] * 6
     graph = build_graph(fake_llm, fake_tools)
     out = graph.invoke({"question": "x", "history": [], "profile": {}, "rounds": 0})
@@ -75,10 +75,10 @@ def test_execute_tools_runs_in_parallel(fake_llm, fake_tools):
             )
         ]
 
-    fake_tools["local_rag"] = tool
+    fake_tools["doc_search"] = tool
     fake_tools["search_news"] = tool
     fake_llm.payload["plan"] = [
-        {"tool": "local_rag", "query": "a", "reason": "r"},
+        {"tool": "doc_search", "query": "a", "reason": "r"},
         {"tool": "search_news", "query": "b", "reason": "r"},
     ]
     graph = build_graph(fake_llm, fake_tools)
@@ -101,17 +101,17 @@ def test_execute_tools_records_duration(fake_llm, fake_tools):
             )
         ]
 
-    fake_tools["local_rag"] = slow
-    fake_llm.payload["plan"] = [{"tool": "local_rag", "query": "x", "reason": "r"}]
+    fake_tools["doc_search"] = slow
+    fake_llm.payload["plan"] = [{"tool": "doc_search", "query": "x", "reason": "r"}]
     graph = build_graph(fake_llm, fake_tools)
     out = graph.invoke({"question": "x", "history": [], "profile": {}, "rounds": 0})
-    steps = [step for step in out["trace"] if step["name"] == "local_rag"]
+    steps = [step for step in out["trace"] if step["name"] == "doc_search"]
     assert steps and steps[0]["duration_ms"] >= 10
 
 
 def test_out_of_scope_skips_tools(fake_llm, fake_tools):
     calls = []
-    fake_tools["local_rag"] = lambda q: calls.append(q) or []
+    fake_tools["doc_search"] = lambda q: calls.append(q) or []
     fake_tools["search_news"] = lambda q: calls.append(q) or []
     fake_llm.payload["in_scope"] = False
     graph = build_graph(fake_llm, fake_tools)
@@ -124,7 +124,7 @@ def test_out_of_scope_skips_tools(fake_llm, fake_tools):
 
 def test_ambiguous_entity_asks_for_clarification(fake_llm, fake_tools):
     calls = []
-    fake_tools["local_rag"] = lambda q: calls.append(q) or []
+    fake_tools["doc_search"] = lambda q: calls.append(q) or []
     fake_llm.payload["ambiguous"] = True
     fake_llm.payload["entities"] = ["格林"]
     graph = build_graph(fake_llm, fake_tools)

@@ -20,9 +20,9 @@ LangGraph Agent
                                    │
        ┌───────────────┬───────────┼────────────┬──────────────┐
        ▼               ▼           ▼            ▼              ▼
-   stats_query     live_query   search_news  search_videos   local_rag
+   stats_query     live_query   search_news  search_videos   doc_search
   data/stats.sqlite nba_api.live  Tavily       Tavily         Chroma + BGE
-  1947–2026-27      今日比分      新闻/转会     B站/YouTube    本地文档
+  1947–2026-27      今日比分      新闻/转会     B站/YouTube    文档 RAG
        │
        └─ 精确数字：球员赛季/生涯、球队战绩、奖项、得分王
 ```
@@ -35,16 +35,17 @@ LangGraph Agent
 - 多源检索：结构化统计、今日比分、新闻、视频、网页正文
 - 结构化数据精确查询：球员赛季/生涯、球队战绩、奖项、得分王；数字走 SQL，不做向量检索
 - 今日比赛/实时比分：`nba_api.live`，30 秒缓存
-- 证据去重、来源质量评分、结构化证据优先、BGE 重排
+- 文档 RAG：Chroma + BGE-small-zh，按文档类型过滤 + 实体加权；可切 BGE-M3 / BGE-reranker
+- 证据去重、来源质量评分、结构化证据优先、BGE 重排（可选）
 - 带行内引用 `[n]` 和可点击来源卡片
 - 自检：引用覆盖、链接可达、无来源不编造
 - 主队 / 喜欢的球员设置，影响检索排序
 - SQLite 缓存 + slowapi 限流
-- 20 题评测集 + 指标报告
+- 24 题评测集（新闻 / 历史 / 对比 / 视频 / 规则 / 结构化统计 / 实时比分）+ 指标报告
 
 ## 技术栈
 
-Python 3.11、FastAPI、Pydantic、Streamlit、LangGraph、DeepSeek/Qwen（OpenAI 兼容）、Tavily、SQLite、nba_api、Chroma、BGE-M3 / BGE-reranker、pytest、Docker Compose。
+Python 3.11、FastAPI、Pydantic、Streamlit、LangGraph、DeepSeek/Qwen（OpenAI 兼容）、Tavily、SQLite、nba_api、Chroma、BGE-small-zh（可切 BGE-M3）/ BGE-reranker（可选）、pytest、Docker Compose。
 
 ## 快速开始
 
@@ -92,15 +93,27 @@ python scripts/build_stats_db.py
 
 生成 `data/stats.sqlite`。需要先配置 Kaggle CLI（`~/.kaggle/kaggle.json`）。
 
-### 4. 本地知识库（可选）
+### 4. 构建文档索引
 
-把语料放到 `data/corpus/`（格式见 `data/corpus/README.md`），然后：
+先用 Tavily 抓取公开文档（输出 `data/docs/documents.jsonl`）：
 
 ```bash
-python scripts/ingest_corpus.py
+python scripts/fetch_docs.py
 ```
 
-首次运行会下载 BGE 模型，需要一些时间和磁盘空间。
+再切块、embedding 并写入 Chroma：
+
+```bash
+python scripts/build_doc_index.py
+```
+
+首次运行会下载 `BAAI/bge-small-zh-v1.5`（约 100MB），需要一些时间和磁盘空间。国内网络可在命令前加代理，例如：
+
+```bash
+HTTPS_PROXY=http://127.0.0.1:17890 python scripts/build_doc_index.py
+```
+
+想要更强的多语言检索，可以把 `.env` 里的 `EMBEDDING_MODEL` 改成 `BAAI/bge-m3`（约 2GB）并重建索引；换 embedding 模型后必须重建。`RERANK_ENABLED=true` 时会额外下载并预热 `BAAI/bge-reranker-base`；只想快速验证保持 `false`。重建会删除旧的 `nba_docs` collection。
 
 ### 5. 启动
 
@@ -152,7 +165,7 @@ app/
   main.py            FastAPI 路由、SSE、限流
   models.py          Pydantic 模型
   agent/             查询分析、规划、执行、评分、自检
-  tools/             搜索、正文提取、结构化统计、今日比分、本地 RAG
+  tools/             搜索、正文提取、结构化统计、今日比分、文档 RAG
   rag/               语料切块、embedding、重排
   services/          ChatService、profile、缓存
   ui/                Streamlit 页面与组件
@@ -167,7 +180,7 @@ docs/                设计文档和实现计划
 - **为什么 Agentic RAG，而不是普通 RAG**：问题需要多源路由（结构化数据 / 新闻 / 视频 / 文档），还要在证据不足时改写查询重试。普通 RAG 只做一次检索，覆盖不了这种问题。
 - **为什么不把数字做成向量**：场均 29.2 分这种精确值需要 SQL 计算和聚合，向量检索只能找到「提到过数字的段落」，既不准也难更新。数字走 SQL，解释类内容走向量，最后合并证据。
 - **为什么用 LangGraph**：状态机显式、可调试，后续可以加 Planner/Critic 演进到多 Agent。
-- **检索质量**：切块 + 元数据 + 向量检索 + BGE 重排 + 来源质量评分。
+- **检索质量**：切块 + 元数据（doc_type/来源/日期）+ 向量检索 + doc_type 过滤 + 实体加权 + 可选 BGE 重排 + 来源质量评分。
 - **防幻觉**：每个关键事实带引用；没有来源就明确说没找到；自检不过最多重试一次。
 - **成本与延迟**：缓存、并行工具、最多 4 次调用 / 2 轮检索、便宜模型。
 - **评测**：20 题评测集 + 自动指标，而不是「我觉得挺好」。
@@ -178,6 +191,6 @@ docs/                设计文档和实现计划
 - 今日比分来自 `nba_api.live`；NBA 官方 stats 接口在部分网络会被 Akamai 拦截，所以历史统计用离线快照，不依赖在线 stats 接口。
 - nbadb 的 Kaggle 版本是原始 16 表、数据只到 2023，暂未作为主数据源；当前赛季统计以 sumitrodatta 快照为准。
 - 单用户，无登录；公网 demo 需要限流。
-- 本地知识库需要自己灌语料；BGE 模型首次运行会下载。
+- 文档索引需要先用 Tavily 抓取语料并重建；首次运行会下载 BGE 模型。
 - 视频搜索优先 B站；YouTube 作为回退，国内网络可能不可达。
 - B站/YouTube 链接可能受地区限制，UI 会标记或丢弃失效链接。

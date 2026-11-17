@@ -10,6 +10,8 @@
 
 **Spec:** `docs/superpowers/specs/2026-11-16-nba-agentic-rag-design.md`
 
+> **2026-11-17 实施更新**：工具集已从 `local_rag` 扩展为 `stats_query`（sumitrodatta SQLite 快照）、`live_query`（nba_api.live）、`doc_search`（Chroma + BGE，Tavily 文档）、`search_news`、`search_videos`、`fetch_page`。计划中的 `local_rag` 任务已被 `doc_search` 取代，数据准备和评测题以 README 与最新代码为准。
+
 ## Global Constraints
 
 - Python 3.11+；所有应用代码放在 `app/` 下。

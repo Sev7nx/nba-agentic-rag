@@ -14,7 +14,7 @@ from app.tools.fetch import is_link_alive
 from app.tools.id_resolver import PLAYER_ALIASES, TEAM_ALIASES
 
 TOOL_NAMES = {
-    "local_rag",
+    "doc_search",
     "search_news",
     "search_videos",
     "fetch_page",
@@ -132,7 +132,7 @@ def plan_tools(state: AgentState, llm: LLMClient) -> dict:
     except Exception:
         calls = [
             {
-                "tool": "local_rag",
+                "tool": "doc_search",
                 "query": state["question"],
                 "reason": "llm_fallback",
             },

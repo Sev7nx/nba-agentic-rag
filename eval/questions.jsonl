@@ -18,3 +18,7 @@
 {"id": "rules-1", "question": "NBA 三分线有多远？", "expected_facts": ["三分线"], "expected_source_types": ["doc"], "needs_link": false}
 {"id": "rules-2", "question": "什么是罗斯条款？", "expected_facts": ["罗斯条款"], "expected_source_types": ["doc"], "needs_link": false}
 {"id": "rules-3", "question": "附加赛的规则是什么？", "expected_facts": ["附加赛"], "expected_source_types": ["doc"], "needs_link": false}
+{"id": "stats-1", "question": "库里 2026-27 赛季场均多少分？", "expected_facts": ["29.2"], "expected_source_types": ["stats"], "needs_link": false}
+{"id": "stats-2", "question": "2026-27 赛季得分王是谁？", "expected_facts": ["东契奇"], "expected_source_types": ["stats"], "needs_link": false}
+{"id": "stats-3", "question": "勇士 2026-27 赛季战绩怎么样？", "expected_facts": ["3 胜 3 负"], "expected_source_types": ["stats"], "needs_link": false}
+{"id": "live-1", "question": "今天有什么比赛？", "expected_facts": [], "expected_source_types": ["live"], "needs_link": false}

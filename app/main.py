@@ -14,8 +14,8 @@ from app.models import ChatRequest, ChatResponse, UserProfile
 from app.services.cache import Cache
 from app.services.chat_service import ChatService
 from app.services.profile import ProfileStore
+from app.tools.doc_search import doc_search
 from app.tools.fetch import fetch_page_tool
-from app.tools.local_rag import local_rag
 from app.tools.nba_live import live_query
 from app.tools.search import TavilySearchProvider, news_search, video_search
 from app.tools.stats_query import stats_query
@@ -36,7 +36,7 @@ def build_default_service(use_cache: bool = True) -> ChatService:
         else None
     )
     tools = {
-        "local_rag": local_rag,
+        "doc_search": doc_search,
         "search_news": lambda q: news_search(provider, q) if provider else [],
         "search_videos": lambda q: video_search(provider, q) if provider else [],
         "fetch_page": fetch_page_tool,

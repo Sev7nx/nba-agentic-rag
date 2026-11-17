@@ -28,7 +28,7 @@ def fake_llm():
         "time_sensitivity": "classic",
         "language": "zh",
         "plan": [
-            {"tool": "local_rag", "query": "库里 最经典 比赛", "reason": "history"},
+            {"tool": "doc_search", "query": "库里 最经典 比赛", "reason": "history"},
             {"tool": "search_news", "query": "库里 新闻", "reason": "news"},
         ],
     }
@@ -38,7 +38,7 @@ def fake_llm():
 @pytest.fixture
 def fake_tools():
     return {
-        "local_rag": lambda q: [
+        "doc_search": lambda q: [
             SearchResult(
                 title="库里经典比赛",
                 url="https://example.com/curry",

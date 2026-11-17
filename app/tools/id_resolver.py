@@ -94,3 +94,24 @@ def resolve_team(name: str) -> dict | None:
         if close:
             candidates = [team for team in team_list if team["full_name"] == close[0]]
     return candidates[0] if candidates else None
+
+
+def entity_terms(query: str) -> list[str]:
+    terms: list[str] = []
+    for alias in PLAYER_ALIASES:
+        if alias in query:
+            terms.append(alias)
+            player = resolve_player(alias)
+            if player:
+                terms.append(player["full_name"])
+                terms.append(player["first_name"])
+                terms.append(player["last_name"])
+    for alias in TEAM_ALIASES:
+        if alias in query:
+            terms.append(alias)
+            team = resolve_team(alias)
+            if team:
+                terms.append(team["abbreviation"])
+                terms.append(team["full_name"])
+                terms.append(team["full_name"].split()[-1])
+    return list(dict.fromkeys(terms))

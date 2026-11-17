@@ -1,6 +1,7 @@
 from urllib.parse import urlparse
 
 from app.tools.base import SearchProvider, SearchResult
+from app.tools.id_resolver import entity_terms
 
 NEWS_DOMAINS = ["hupu.com", "sports.qq.com", "nba.com", "espn.com"]
 BILIBILI_DOMAINS = ["bilibili.com"]
@@ -71,6 +72,34 @@ def _is_nba_source(result: SearchResult) -> bool:
     return True
 
 
+def _rank_by_entity(
+    query: str,
+    results: list[SearchResult],
+    title_only: bool = False,
+) -> list[SearchResult]:
+    terms = [term.lower() for term in entity_terms(query)]
+    if not terms:
+        return results
+    title_matches = [
+        result
+        for result in results
+        if any(term in result.title.lower() for term in terms)
+    ]
+    if title_only and title_matches:
+        return title_matches
+    return sorted(
+        results,
+        key=lambda result: (
+            any(term in result.title.lower() for term in terms),
+            any(
+                term in f"{result.title} {result.snippet}".lower()
+                for term in terms
+            ),
+        ),
+        reverse=True,
+    )
+
+
 def news_search(provider: SearchProvider, query: str, days: int = 30) -> list[SearchResult]:
     try:
         results = provider.search(
@@ -81,7 +110,10 @@ def news_search(provider: SearchProvider, query: str, days: int = 30) -> list[Se
         )
     except Exception:
         return []
-    return [result for result in results if _is_nba_source(result)]
+    return _rank_by_entity(
+        query,
+        [result for result in results if _is_nba_source(result)],
+    )
 
 
 def video_search(provider: SearchProvider, query: str) -> list[SearchResult]:
@@ -95,13 +127,17 @@ def video_search(provider: SearchProvider, query: str) -> list[SearchResult]:
     except Exception:
         results = []
     if results:
-        return results
+        return _rank_by_entity(query, results, title_only=True)
     try:
-        return provider.search(
+        return _rank_by_entity(
             query,
-            include_domains=YOUTUBE_DOMAINS,
-            max_results=5,
-            topic="general",
+            provider.search(
+                query,
+                include_domains=YOUTUBE_DOMAINS,
+                max_results=5,
+                topic="general",
+            ),
+            title_only=True,
         )
     except Exception:
         return []

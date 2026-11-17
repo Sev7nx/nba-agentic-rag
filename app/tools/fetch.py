@@ -72,7 +72,10 @@ def is_link_alive(url: str, timeout: float = 3.0, url_checker=None) -> bool:
         response = httpx.head(
             url, timeout=timeout, follow_redirects=True, headers=_HEADERS
         )
-        return response.status_code < 400
+        return (
+            response.status_code < 400
+            or response.status_code in {403, 405, 412, 429}
+        )
     except Exception:
         return False
 

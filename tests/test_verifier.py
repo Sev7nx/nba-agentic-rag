@@ -173,7 +173,7 @@ def test_synthesize_prompt_mentions_conflict(fake_tools):
             return schema(
                 **{
                     "plan": [
-                        {"tool": "local_rag", "query": "x", "reason": "r"}
+                        {"tool": "doc_search", "query": "x", "reason": "r"}
                     ],
                     "entities": [],
                     "intent": "news",

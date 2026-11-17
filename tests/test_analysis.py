@@ -170,7 +170,7 @@ def test_plan_tools_falls_back_on_llm_error():
         "profile": {},
     }
     out = plan_tools(state, FailingLLM())
-    assert {call["tool"] for call in out["plan"]} == {"local_rag", "search_news"}
+    assert {call["tool"] for call in out["plan"]} == {"doc_search", "search_news"}
 
 
 def test_plan_tools_trace_contains_query():

@@ -71,6 +71,54 @@ def test_video_search_falls_back_to_youtube():
     assert results[0].site == "youtube.com"
 
 
+def test_news_search_keeps_non_title_entity_matches():
+    class Provider:
+        def search(self, *args, **kwargs):
+            return [
+                SearchResult(
+                    title="Kuminga trade rumor",
+                    url="https://www.espn.com/nba/story/_/id/1",
+                    site="espn.com",
+                    snippet="The Golden State Warriors are exploring options.",
+                    result_type="news",
+                ),
+                SearchResult(
+                    title="Warriors trade update",
+                    url="https://www.espn.com/nba/story/_/id/2",
+                    site="espn.com",
+                    snippet="Latest update.",
+                    result_type="news",
+                ),
+            ]
+
+    results = news_search(Provider(), "勇士交易")
+    assert len(results) == 2
+    assert results[0].title == "Warriors trade update"
+
+
+def test_video_search_orders_entity_matches():
+    class Provider:
+        def search(self, *args, **kwargs):
+            return [
+                SearchResult(
+                    title="科比经典比赛集锦",
+                    url="https://www.bilibili.com/video/BV2",
+                    site="bilibili.com",
+                    snippet="相关内容提到库里",
+                    result_type="video",
+                ),
+                SearchResult(
+                    title="库里绝杀集锦",
+                    url="https://www.bilibili.com/video/BV1",
+                    site="bilibili.com",
+                    result_type="video",
+                ),
+            ]
+
+    results = video_search(Provider(), "库里 经典 集锦")
+    assert [result.title for result in results] == ["库里绝杀集锦"]
+
+
 def test_empty_results_returns_empty_list():
     assert news_search(FakeProvider(), "不存在的问题") == []
 

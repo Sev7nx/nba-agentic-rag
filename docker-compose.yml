@@ -11,7 +11,14 @@ services:
       CHROMA_DIR: /app/data/chroma
       CACHE_PATH: /app/data/cache.db
       PROFILE_PATH: /app/data/profile.json
+      STATS_DB_PATH: /app/data/stats.sqlite
+      STATS_AS_OF: ${STATS_AS_OF:-2026-11-01}
+      DOCS_PATH: /app/data/docs/documents.jsonl
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-BAAI/bge-small-zh-v1.5}
+      RERANK_ENABLED: ${RERANK_ENABLED:-false}
       RATE_LIMIT: ${RATE_LIMIT:-20/hour}
+    volumes:
+      - ./data:/app/data
 
   ui:
     build: .
@@ -22,3 +29,5 @@ services:
       API_URL: http://api:8000
     depends_on:
       - api
+    volumes:
+      - ./data:/app/data

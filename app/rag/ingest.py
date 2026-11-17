@@ -1,4 +1,5 @@
 import json
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -19,6 +20,8 @@ class Document:
     entity_type: str = "unknown"
     entity_name: str = ""
     date: str | None = None
+    doc_type: str = "doc"
+    source: str = ""
 
 
 @dataclass
@@ -26,6 +29,61 @@ class Chunk:
     id: str
     text: str
     metadata: dict = field(default_factory=dict)
+
+
+_NAV_MARKERS = (
+    "手机虎扑",
+    "虎扑客户端",
+    "关注虎扑",
+    "下载虎扑",
+    "扫码",
+    "登录",
+    "注册",
+    "新浪微博",
+    "官方微信",
+    "Instagram",
+    "虎扑篮球",
+    "相关作品",
+    "参演电视剧",
+    "参考资料",
+    "目录",
+)
+
+
+def clean_text(text: str) -> str:
+    text = re.sub(r"!\[[^\]]*\]\([^)]*\)", " ", text)
+    text = re.sub(r"data:image/[^\s)]+", " ", text)
+    text = re.sub(r"<[^>]+>", " ", text)
+    kept: list[str] = []
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line:
+            continue
+        if line.startswith("* [") and (
+            "http" in line or "javascript" in line
+        ):
+            continue
+        if "NBA比赛中心" in line or "boxscore/" in line:
+            continue
+        if "fr=lemma" in line or "baike.baidu.com/item" in line:
+            continue
+        if re.match(r"^[0-9a-f]{16,}", line):
+            continue
+        if any(marker in line for marker in _NAV_MARKERS) and len(line) < 80:
+            continue
+        if line.count("](") >= 2 or line.count("http") >= 3:
+            continue
+        if len(line) < 3:
+            continue
+        if line.count("|") >= 2 and len(line) < 60:
+            continue
+        if re.fullmatch(r"[\W_]+", line):
+            continue
+        kept.append(line)
+    cleaned = "\n".join(kept)
+    cleaned = re.sub(r"[ \t]+", " ", cleaned)
+    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
+    return cleaned.strip()
 
 
 def _parse_front_matter(text: str) -> tuple[dict, str]:
@@ -89,6 +147,42 @@ def load_documents(corpus_dir: Path) -> list[Document]:
     return docs
 
 
+def load_jsonl_documents(
+    path: Path, max_chars: int = 60000
+) -> list[Document]:
+    docs: list[Document] = []
+    for index, line in enumerate(
+        path.read_text(encoding="utf-8").splitlines()
+    ):
+        if not line.strip():
+            continue
+        try:
+            item = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        url = str(item.get("url") or "").strip()
+        if not url:
+            continue
+        text = clean_text(str(item.get("text") or ""))[:max_chars]
+        if not text:
+            continue
+        docs.append(
+            Document(
+                doc_id=str(item.get("doc_id") or f"doc-{index}"),
+                title=str(item.get("title") or "NBA 文档"),
+                url=url,
+                text=text,
+                source_type=str(item.get("doc_type") or "doc"),
+                entity_type=str(item.get("entity_type") or "unknown"),
+                entity_name=str(item.get("entity_name") or ""),
+                date=item.get("date"),
+                doc_type=str(item.get("doc_type") or "doc"),
+                source=str(item.get("source") or ""),
+            )
+        )
+    return docs
+
+
 def chunk_document(doc: Document, chunk_size: int = 600, overlap: int = 100) -> list[Chunk]:
     text = doc.text.strip()
     if not text:
@@ -111,6 +205,8 @@ def chunk_document(doc: Document, chunk_size: int = 600, overlap: int = 100) -> 
                     "entity_type": doc.entity_type,
                     "entity_name": doc.entity_name,
                     "date": doc.date,
+                    "doc_type": doc.doc_type,
+                    "source": doc.source,
                 },
             )
         )
@@ -128,6 +224,33 @@ def build_index(chunks: list[Chunk], embedder: Embedder, persist_dir: Path) -> "
 
     client = chromadb.PersistentClient(path=str(persist_dir))
     collection = client.get_or_create_collection(name="nba")
+    if chunks:
+        collection.add(
+            ids=[chunk.id for chunk in chunks],
+            documents=[chunk.text for chunk in chunks],
+            metadatas=[_clean_metadata(chunk.metadata) for chunk in chunks],
+            embeddings=embedder.embed([chunk.text for chunk in chunks]),
+        )
+    return collection
+
+
+def build_doc_index(
+    chunks: list[Chunk],
+    embedder: Embedder,
+    persist_dir: Path,
+    collection_name: str = "nba_docs",
+) -> "Collection":
+    import chromadb
+
+    client = chromadb.PersistentClient(path=str(persist_dir))
+    try:
+        client.delete_collection(collection_name)
+    except Exception:
+        pass
+    collection = client.create_collection(
+        name=collection_name,
+        metadata={"hnsw:space": "cosine"},
+    )
     if chunks:
         collection.add(
             ids=[chunk.id for chunk in chunks],

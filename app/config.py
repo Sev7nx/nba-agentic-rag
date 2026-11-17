@@ -13,6 +13,11 @@ class Settings(BaseSettings):
     profile_path: str = "data/profile.json"
     stats_db_path: str = "data/stats.sqlite"
     stats_as_of: str = "2026-11-01"
+    docs_path: str = "data/docs/documents.jsonl"
+    embedding_model: str = "BAAI/bge-small-zh-v1.5"
+    embedding_local_only: bool = True
+    rerank_model: str = "BAAI/bge-reranker-base"
+    rerank_enabled: bool = False
     api_url: str = "http://localhost:8000"
     rate_limit: str = "20/hour"
 

@@ -5,6 +5,8 @@
 > 状态：待确认
 > 用途：个人使用 + AI 应用开发岗位简历项目
 
+> **2026-11-17 实施更新**：结构化数据改用 sumitrodatta Kaggle 快照（`data/stats.sqlite`，1947–2026-27，`STATS_AS_OF=2026-11-01`），`nba_api.live` 提供今日比分；文档 RAG 使用 Tavily 抓取的 `data/docs/documents.jsonl` + Chroma collection `nba_docs`，工具名 `doc_search` 取代 `local_rag`；评测集扩展到 24 题。下文原始设计里涉及本地语料/`local_rag` 的部分，以本节和 README 为准。
+
 ---
 
 ## 1. 背景与目标
