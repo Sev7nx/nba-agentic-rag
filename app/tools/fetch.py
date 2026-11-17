@@ -7,6 +7,14 @@ import httpx
 
 from app.tools.base import SearchResult
 
+_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/124.0.0.0 Safari/537.36"
+    )
+}
+
 
 def _site_from_url(url: str) -> str:
     host = urlparse(url).netloc
@@ -39,7 +47,7 @@ def _is_safe_url(url: str) -> bool:
 
 
 def _extract(url: str) -> str:
-    response = httpx.get(url, timeout=10.0, follow_redirects=True)
+    response = httpx.get(url, timeout=10.0, follow_redirects=True, headers=_HEADERS)
     response.raise_for_status()
     text = re.sub(r"<script.*?</script>|<style.*?</style>", " ", response.text, flags=re.S | re.I)
     text = re.sub(r"<[^>]+>", " ", text)
@@ -61,7 +69,9 @@ def is_link_alive(url: str, timeout: float = 3.0, url_checker=None) -> bool:
     if not checker(url):
         return False
     try:
-        response = httpx.head(url, timeout=timeout, follow_redirects=True)
+        response = httpx.head(
+            url, timeout=timeout, follow_redirects=True, headers=_HEADERS
+        )
         return response.status_code < 400
     except Exception:
         return False

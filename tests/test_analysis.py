@@ -156,6 +156,64 @@ def test_plan_tools_falls_back_on_llm_error():
     assert {call["tool"] for call in out["plan"]} == {"local_rag", "search_news"}
 
 
+def test_plan_tools_trace_contains_query():
+    state = {
+        "question": "勇士交易",
+        "analysis": {
+            "entities": ["勇士"],
+            "intent": "news",
+            "time_sensitivity": "latest",
+            "language": "zh",
+        },
+        "history": [],
+        "profile": {},
+    }
+    out = plan_tools(
+        state,
+        FakeLLM(
+            {
+                "plan": [
+                    {
+                        "tool": "search_news",
+                        "query": "勇士交易",
+                        "reason": "news",
+                    }
+                ]
+            }
+        ),
+    )
+    assert "勇士交易" in out["trace"][-1]["detail"]
+
+
+def test_plan_tools_drops_fetch_page_without_url():
+    state = {
+        "question": "勇士交易",
+        "analysis": {
+            "entities": ["勇士"],
+            "intent": "news",
+            "time_sensitivity": "latest",
+            "language": "zh",
+        },
+        "history": [],
+        "profile": {},
+    }
+    out = plan_tools(
+        state,
+        FakeLLM(
+            {
+                "plan": [
+                    {
+                        "tool": "fetch_page",
+                        "query": "勇士交易",
+                        "reason": "news",
+                    }
+                ]
+            }
+        ),
+    )
+    assert out["plan"] == []
+
+
 def test_synthesize_falls_back_on_llm_error():
     state = {
         "question": "库里",

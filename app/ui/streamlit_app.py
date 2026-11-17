@@ -60,7 +60,7 @@ for message in st.session_state.messages:
         if message.get("sources"):
             st.markdown(render_sources(message["sources"]), unsafe_allow_html=True)
 
-if question := st.chat_input("问一个 NBA 问题，比如：库里哪场比赛最经典？"):
+if question := st.chat_input("问一个 NBA 问题，比如：斯蒂芬·库里哪场比赛最经典？"):
     st.session_state.messages.append({"role": "user", "content": question})
     with st.chat_message("user"):
         st.markdown(question)

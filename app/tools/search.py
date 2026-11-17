@@ -3,7 +3,9 @@ from urllib.parse import urlparse
 from app.tools.base import SearchProvider, SearchResult
 
 NEWS_DOMAINS = ["hupu.com", "sports.qq.com", "nba.com", "espn.com"]
-VIDEO_DOMAINS = ["bilibili.com", "youtube.com"]
+BILIBILI_DOMAINS = ["bilibili.com"]
+YOUTUBE_DOMAINS = ["youtube.com"]
+VIDEO_DOMAINS = BILIBILI_DOMAINS + YOUTUBE_DOMAINS
 
 
 def _site_from_url(url: str) -> str:
@@ -40,7 +42,7 @@ class TavilySearchProvider:
                 include_domains=include_domains,
                 max_results=max_results,
                 topic=topic,
-                search_depth="advanced",
+                search_depth="basic",
             )
         except Exception:
             return []
@@ -63,9 +65,15 @@ class TavilySearchProvider:
         return results
 
 
+def _is_nba_source(result: SearchResult) -> bool:
+    if "espn.com" in result.url and "/nba/" not in result.url:
+        return False
+    return True
+
+
 def news_search(provider: SearchProvider, query: str, days: int = 30) -> list[SearchResult]:
     try:
-        return provider.search(
+        results = provider.search(
             query,
             include_domains=NEWS_DOMAINS,
             max_results=5,
@@ -73,13 +81,25 @@ def news_search(provider: SearchProvider, query: str, days: int = 30) -> list[Se
         )
     except Exception:
         return []
+    return [result for result in results if _is_nba_source(result)]
 
 
 def video_search(provider: SearchProvider, query: str) -> list[SearchResult]:
     try:
+        results = provider.search(
+            query,
+            include_domains=BILIBILI_DOMAINS,
+            max_results=5,
+            topic="general",
+        )
+    except Exception:
+        results = []
+    if results:
+        return results
+    try:
         return provider.search(
             query,
-            include_domains=VIDEO_DOMAINS,
+            include_domains=YOUTUBE_DOMAINS,
             max_results=5,
             topic="general",
         )

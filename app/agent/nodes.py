@@ -108,8 +108,14 @@ def plan_tools(state: AgentState, llm: LLMClient) -> dict:
     try:
         plan = llm.chat_json(PLAN_SYSTEM, user, Plan)
         calls = [
-            call.model_dump() for call in plan.plan if call.tool in TOOL_NAMES
-        ][:4]
+        call.model_dump()
+        for call in plan.plan
+        if call.tool in TOOL_NAMES
+        and (
+            call.tool != "fetch_page"
+            or call.query.strip().startswith(("http://", "https://"))
+        )
+    ][:4]
     except Exception:
         calls = [
             {
@@ -125,12 +131,15 @@ def plan_tools(state: AgentState, llm: LLMClient) -> dict:
         ]
     duration_ms = int((time.perf_counter() - start) * 1000)
     usage = getattr(llm, "last_usage", {}) or {}
+    detail = " | ".join(
+        f"{call['tool']}：{call['query'][:40]}" for call in calls
+    ) or "0 tools"
     return {
         "plan": calls,
         "trace": _append_trace(
             state,
             "plan",
-            f"{len(calls)} tools",
+            detail,
             duration_ms,
             usage.get("tokens", 0),
             usage.get("cost_cny", 0.0),
