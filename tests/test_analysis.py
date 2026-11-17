@@ -272,6 +272,67 @@ def test_plan_tools_accepts_stats_query():
     assert out["plan"][0]["tool"] == "stats_query"
 
 
+def test_plan_tools_adds_stats_query_for_stats_keywords():
+    state = {
+        "question": "2026-27 赛季得分王是谁？",
+        "analysis": {
+            "entities": [],
+            "intent": "stats",
+            "time_sensitivity": "latest",
+            "language": "zh",
+        },
+        "history": [],
+        "profile": {},
+    }
+    out = plan_tools(
+        state,
+        FakeLLM(
+            {
+                "plan": [
+                    {
+                        "tool": "search_news",
+                        "query": "2026-27 得分王",
+                        "reason": "news",
+                    }
+                ]
+            }
+        ),
+    )
+    assert out["plan"][0]["tool"] == "stats_query"
+    assert out["plan"][0]["reason"] == "stats_keyword_guard"
+    assert out["plan"][0]["query"] == state["question"]
+
+
+def test_plan_tools_replaces_variant_stats_query_with_full_question():
+    state = {
+        "question": "库里本赛季场均多少分？",
+        "analysis": {
+            "entities": ["库里"],
+            "intent": "stats",
+            "time_sensitivity": "latest",
+            "language": "zh",
+        },
+        "history": [],
+        "profile": {},
+    }
+    out = plan_tools(
+        state,
+        FakeLLM(
+            {
+                "plan": [
+                    {
+                        "tool": "stats_query",
+                        "query": "Stephen Curry stats",
+                        "reason": "stats",
+                    }
+                ]
+            }
+        ),
+    )
+    assert out["plan"][0]["query"] == state["question"]
+    assert out["plan"][0]["reason"] == "stats_keyword_guard"
+
+
 def test_plan_tools_accepts_live_query():
     state = {
         "question": "今天有什么比赛",

@@ -7,6 +7,8 @@ class Settings(BaseSettings):
     llm_api_key: str = ""
     llm_base_url: str = "https://api.deepseek.com"
     llm_model: str = "deepseek-chat"
+    llm_input_price_cny: float = 2.0
+    llm_output_price_cny: float = 8.0
     tavily_api_key: str = ""
     chroma_dir: str = "data/chroma"
     cache_path: str = "data/cache.db"

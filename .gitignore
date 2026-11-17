@@ -20,7 +20,6 @@ data/stats.sqlite
 data/qdrant/
 .superpowers/
 .streamlit/secrets.toml
-eval/report.md
 build/
 dist/
 *.egg-info/

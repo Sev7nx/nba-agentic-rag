@@ -173,6 +173,21 @@ python scripts/eval.py --limit 3 --fake   # 不调 API，检查报告格式
 
 目标：命中率 ≥ 70%，引用覆盖 ≥ 90%，链接有效 ≥ 95%，P95 < 10 秒，单次成本 < 0.2 元。
 
+最近一次真实评测（2026-11-17，24 题，DeepSeek + Tavily，65 篇文档 / 810 chunks）：
+
+| 指标 | 结果 | 目标 |
+|---|---:|---:|
+| retrieval_hit_rate | 1.000 | ≥ 0.70 |
+| citation_coverage | 1.000 | ≥ 0.90 |
+| fact_hit_rate | 1.000 | — |
+| link_validity | 1.000* | ≥ 0.95 |
+| p95_latency_ms | 19,398 | < 10,000 |
+| avg_cost_cny | 0.0145 | < 0.20 |
+
+\* 死链在返回前丢弃，`link_validity` 只统计返回的可用链接。
+
+P95 还没达到 10 秒目标；主要耗时在 `analyze` / `plan` / `synthesize` 三次 LLM 调用和外部检索。下一步可以合并 `analyze` 和 `plan`，或让结构化统计走 fast path。
+
 把真实跑出来的结果填到 README 或简历里；不要用 `--fake` 的数字冒充真实指标。
 
 ## 项目结构

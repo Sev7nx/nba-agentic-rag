@@ -43,12 +43,13 @@ class EvalReport:
             f"- p95_latency_ms: {self.p95_latency_ms:.1f}",
             f"- avg_cost_cny: {self.avg_cost_cny:.4f}",
             "",
-            "| id | question | sources | cited | latency_ms |",
-            "|---|---|---|---|---|",
+            "| id | question | sources | types | hit | fact | cited | latency_ms |",
+            "|---|---|---|---|---|---|---|---|",
         ]
         for row in self.rows:
             lines.append(
                 f"| {row['id']} | {row['question']} | {row['sources']} | "
+                f"{row['types']} | {row['hit']} | {row['fact']} | "
                 f"{row['cited']} | {row['latency_ms']:.1f} |"
             )
         return "\n".join(lines)
@@ -78,15 +79,17 @@ def evaluate(questions: list[EvalQuestion], chat_service) -> EvalReport:
         response = chat_service.answer(ChatRequest(question=question.question))
         latency_ms = (time.perf_counter() - start) * 1000
         latencies.append(latency_ms)
-        hits += 1 if _hit(question, response) else 0
+        hit = _hit(question, response)
+        hits += 1 if hit else 0
         cited = bool(re.search(r"\[\d+\]", response.answer)) and bool(response.sources)
         citations += 1 if cited else 0
         text = response.answer + " " + " ".join(
             source.snippet or "" for source in response.sources
         )
-        if not question.expected_facts or all(
-            fact in text for fact in question.expected_facts
-        ):
+        fact = not question.expected_facts or all(
+            expected in text for expected in question.expected_facts
+        )
+        if fact:
             facts_hit += 1
         if question.needs_link and not response.sources:
             total_links += 1
@@ -100,6 +103,12 @@ def evaluate(questions: list[EvalQuestion], chat_service) -> EvalReport:
                 "id": question.id,
                 "question": question.question,
                 "sources": len(response.sources),
+                "types": ",".join(
+                    sorted({source.type for source in response.sources})
+                )
+                or "-",
+                "hit": "yes" if hit else "no",
+                "fact": "yes" if fact else "no",
                 "cited": "yes" if cited else "no",
                 "latency_ms": latency_ms,
             }

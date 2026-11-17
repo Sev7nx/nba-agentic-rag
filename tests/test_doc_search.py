@@ -152,6 +152,37 @@ def test_doc_search_prefers_entity_match(tmp_path, monkeypatch):
     assert results[0].url == "https://warriors.example"
 
 
+def test_doc_search_ranks_history_topic_over_entity_title(tmp_path, monkeypatch):
+    chunks = [
+        Chunk(
+            id="kobe-81",
+            text="Kobe Bryant scored 81 points against the Raptors in 2006.",
+            metadata={
+                "title": "Top Moments: Kobe Bryant drops 81 points",
+                "url": "https://nba.example/kobe-81",
+                "doc_type": "game_report",
+            },
+        ),
+        Chunk(
+            id="kobe-final",
+            text="Kobe Bryant scored 60 points in his final game against the Jazz.",
+            metadata={
+                "title": "Lakers 101-96 Jazz (Apr 13, 2016) Game Recap",
+                "url": "https://espn.example/kobe-final",
+                "doc_type": "game_report",
+            },
+        ),
+    ]
+    collection = build_doc_index(chunks, FlatEmbedder(), tmp_path)
+    monkeypatch.setattr(doc_tool, "get_collection", lambda: collection)
+    monkeypatch.setattr(doc_tool, "get_embedder", lambda: FlatEmbedder())
+    monkeypatch.setattr(doc_tool, "get_reranker", lambda: FakeReranker())
+
+    results = doc_tool.doc_search("科比退役战得了多少分", limit=1)
+
+    assert results[0].url == "https://espn.example/kobe-final"
+
+
 def test_doc_search_returns_empty_when_index_missing(monkeypatch):
     def missing():
         raise ValueError("collection missing")

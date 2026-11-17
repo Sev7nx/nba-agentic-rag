@@ -1,3 +1,4 @@
+import re
 from functools import lru_cache
 from urllib.parse import urlparse
 
@@ -12,12 +13,67 @@ COLLECTION_NAME = "nba_docs"
 _DOC_TYPE_KEYWORDS = (
     (
         "rules",
-        ("规则", "三分线", "附加赛", "条款", "犯规", "判罚", "违例", "工资帽", "选秀"),
+        (
+            "规则",
+            "三分线",
+            "附加赛",
+            "条款",
+            "犯规",
+            "判罚",
+            "违例",
+            "工资帽",
+            "选秀",
+        ),
     ),
-    ("game_report", ("比赛", "战报", "总决赛", "季后赛", "绝杀", "经典")),
+    (
+        "game_report",
+        (
+            "比赛",
+            "战报",
+            "总决赛",
+            "季后赛",
+            "绝杀",
+            "经典",
+            "最后一投",
+            "退役战",
+            "夺冠",
+            "60 分",
+            "60分",
+            "81 分",
+            "经典比赛",
+            "game 7",
+            "finals",
+        ),
+    ),
     ("tactic", ("战术", "挡拆", "防守策略")),
     ("player_intro", ("球员", "生涯", "技术特点", "资料", "介绍")),
 )
+
+_HISTORY_TERMS = (
+    ("总决赛", ("finals", "nba finals")),
+    ("最后一投", ("last shot", "final shot")),
+    ("退役战", ("final game", "retirement", "farewell")),
+    ("夺冠", ("championship", "champion", "title")),
+    ("绝杀", ("game winner", "buzzer", "clutch")),
+    ("经典", ("classic", "iconic", "greatest")),
+    ("第七场", ("game 7", "game seven")),
+    ("加时", ("overtime",)),
+    ("60 分", ("60 points", "60-point")),
+    ("60分", ("60 points", "60-point")),
+    ("81 分", ("81 points", "81-point")),
+    ("罗斯条款", ("rose rule", "derrick rose rule")),
+)
+
+
+def _history_terms(query: str) -> list[str]:
+    terms: list[str] = []
+    for chinese, english in _HISTORY_TERMS:
+        if chinese in query:
+            terms.append(chinese)
+            terms.extend(english)
+    for year in re.findall(r"(?:19|20)\d{2}", query):
+        terms.append(year)
+    return terms
 
 
 def _doc_type_filter(query: str) -> dict | None:
@@ -57,7 +113,17 @@ def _site(url: str, source: str = "") -> str:
     return host[4:] if host.startswith("www.") else host
 
 
-def _snippet(text: str, terms: list[str], size: int = 400) -> str:
+def _snippet(
+    text: str,
+    terms: list[str],
+    query: str = "",
+    size: int = 600,
+) -> str:
+    if any(word in query for word in ("多少分", "几分", "得分")):
+        match = re.search(r"(\d{2,3})\s*(?:points|分)", text)
+        if match:
+            start = max(0, match.start() - 200)
+            return text[start : start + size]
     lowered = text.lower()
     for term in terms:
         index = lowered.find(term)
@@ -67,7 +133,7 @@ def _snippet(text: str, terms: list[str], size: int = 400) -> str:
     return text[:size]
 
 
-def doc_search(query: str, top_k: int = 12, limit: int = 5) -> list[SearchResult]:
+def doc_search(query: str, top_k: int = 50, limit: int = 5) -> list[SearchResult]:
     try:
         collection = get_collection()
         count = collection.count()
@@ -112,20 +178,38 @@ def doc_search(query: str, top_k: int = 12, limit: int = 5) -> list[SearchResult
         key=lambda item: item[0],
         reverse=True,
     )
-    terms = [term.lower() for term in entity_terms(query)]
-    if terms:
-        ranked = sorted(
-            ranked,
-            key=lambda item: (
-                any(
-                    term
-                    in f"{item[2].get('title', '')} {item[1]}".lower()
-                    for term in terms
-                ),
+    terms = [
+        term.lower()
+        for term in [
+            *entity_terms(query),
+            *_history_terms(query),
+        ]
+    ]
+    terms = list(dict.fromkeys(term for term in terms if term))
+    topic_terms = [
+        term.lower() for term in _history_terms(query) if term
+    ]
+    entity_terms_list = [
+        term.lower() for term in entity_terms(query) if term
+    ]
+    if topic_terms or entity_terms_list:
+        def _score(item):
+            metadata = item[2] or {}
+            title = str(metadata.get("title") or "").lower()
+            body = item[1].lower()
+
+            def hits(candidates, haystack):
+                return sum(term in haystack for term in candidates)
+
+            return (
+                hits(topic_terms, title),
+                hits(topic_terms, body),
+                hits(entity_terms_list, title),
+                hits(entity_terms_list, body),
                 item[0],
-            ),
-            reverse=True,
-        )
+            )
+
+        ranked = sorted(ranked, key=_score, reverse=True)
 
     sources: list[SearchResult] = []
     seen_urls: set[str] = set()
@@ -135,12 +219,27 @@ def doc_search(query: str, top_k: int = 12, limit: int = 5) -> list[SearchResult
         if not url.startswith(("http://", "https://")) or url in seen_urls:
             continue
         seen_urls.add(url)
+        snippet = _snippet(text, terms, query)
+        if (
+            any(word in query for word in ("多少分", "几分", "得分"))
+            and metadata.get("doc_id")
+        ):
+            try:
+                first = collection.get(
+                    ids=[f"{metadata['doc_id']}-0"],
+                    include=["documents"],
+                )
+                first_docs = first.get("documents") or []
+                if first_docs:
+                    snippet = first_docs[0][:800]
+            except Exception:
+                pass
         sources.append(
             SearchResult(
                 title=metadata.get("title") or "NBA 文档",
                 url=url,
                 site=_site(url, str(metadata.get("source") or "")),
-                snippet=_snippet(text, terms),
+                snippet=snippet,
                 published_date=metadata.get("date"),
                 result_type="doc",
             )

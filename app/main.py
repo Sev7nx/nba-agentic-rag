@@ -29,6 +29,8 @@ def build_default_service(use_cache: bool = True) -> ChatService:
         settings.llm_api_key,
         settings.llm_base_url,
         settings.llm_model,
+        input_price_cny=settings.llm_input_price_cny,
+        output_price_cny=settings.llm_output_price_cny,
     )
     provider = (
         TavilySearchProvider(settings.tavily_api_key)

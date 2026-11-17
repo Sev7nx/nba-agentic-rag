@@ -22,6 +22,24 @@ TOOL_NAMES = {
     "stats_query",
 }
 
+STATS_HINTS = (
+    "场均",
+    "得分王",
+    "篮板王",
+    "助攻王",
+    "三分王",
+    "战绩",
+    "排名",
+    "生涯",
+    "荣誉",
+    "全明星",
+    "MVP",
+    "多少分",
+    "几场",
+    "几胜",
+    "数据",
+)
+
 
 class Analysis(BaseModel):
     entities: list[str] = Field(default_factory=list)
@@ -142,6 +160,19 @@ def plan_tools(state: AgentState, llm: LLMClient) -> dict:
                 "reason": "llm_fallback",
             },
         ]
+    if any(hint in state["question"] for hint in STATS_HINTS):
+        calls = [
+            call for call in calls if call["tool"] != "stats_query"
+        ]
+        calls.insert(
+            0,
+            {
+                "tool": "stats_query",
+                "query": state["question"],
+                "reason": "stats_keyword_guard",
+            },
+        )
+        calls = calls[:4]
     duration_ms = int((time.perf_counter() - start) * 1000)
     usage = getattr(llm, "last_usage", {}) or {}
     detail = " | ".join(
@@ -274,6 +305,11 @@ def synthesize(state: AgentState, llm: LLMClient) -> dict:
             )
         )
     sources = check_links(sources)
+    live_sources = [
+        source for source in sources if source.link_status != "dead"
+    ]
+    if live_sources:
+        sources = live_sources
 
     context = "\n".join(
         f"[{item.id}] {item.title}: {item.snippet or ''}" for item in sources[:8]
@@ -331,7 +367,6 @@ def _quality(url: str) -> float:
 
 
 def grade_evidence(state: AgentState) -> dict:
-    seen: set[str] = set()
     ranked: list[tuple[float, dict]] = []
     entities = (state.get("analysis") or {}).get("entities", [])
     profile = state.get("profile") or {}
@@ -343,12 +378,20 @@ def grade_evidence(state: AgentState) -> dict:
         ]
         if value
     ]
+    deduped: dict[str, dict] = {}
     for item in state.get("tool_results") or []:
         data = _as_dict(item)
         url = data.get("url", "")
-        if not url or url in seen:
+        if not url:
             continue
-        seen.add(url)
+        existing = deduped.get(url)
+        if existing is None or (
+            data.get("result_type") == "stats"
+            and existing.get("result_type") != "stats"
+        ):
+            deduped[url] = data
+    for data in deduped.values():
+        url = data.get("url", "")
         text = f"{data.get('title', '')} {data.get('snippet', '')}"
         entity_bonus = 0.1 if any(entity in text for entity in entities) else 0.0
         recency_bonus = 0.05 if data.get("published_date") else 0.0

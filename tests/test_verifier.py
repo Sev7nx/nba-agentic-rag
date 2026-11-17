@@ -14,6 +14,31 @@ def test_grade_evidence_dedupes_urls():
     assert len(out["evidence"]) == 1
 
 
+def test_grade_evidence_prefers_stats_on_same_url():
+    state = {
+        "analysis": {"entities": []},
+        "tool_results": [
+            {
+                "title": "news",
+                "url": "https://espn.com/nba/stats",
+                "site": "espn.com",
+                "snippet": "news",
+                "result_type": "news",
+            },
+            {
+                "title": "stats",
+                "url": "https://espn.com/nba/stats",
+                "site": "espn.com",
+                "snippet": "stats",
+                "result_type": "stats",
+            },
+        ],
+    }
+    out = grade_evidence(state)
+    assert len(out["evidence"]) == 1
+    assert out["evidence"][0]["result_type"] == "stats"
+
+
 def test_grade_evidence_prefers_stats_over_news():
     state = {
         "analysis": {"entities": []},
