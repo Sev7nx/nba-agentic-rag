@@ -1,5 +1,7 @@
 # NBA Scout — Agentic RAG NBA 问答助手
 
+[![CI](https://github.com/Sev7nx/nba-agentic-rag/actions/workflows/ci.yml/badge.svg)](https://github.com/Sev7nx/nba-agentic-rag/actions/workflows/ci.yml)
+
 用一句中文提问，Agent 自己决定去结构化数据、新闻搜索还是视频搜索找答案，返回带引用和可点击来源的中文回答。
 
 项目目标：个人使用 + AI 应用开发岗位简历项目。核心不是「查数据」，而是「帮你找」：把分散在虎扑、腾讯体育、B站和本地资料里的信息，变成一句回答加一组链接。
