@@ -19,6 +19,7 @@ data/current/
 data/stats.sqlite
 data/qdrant/
 .superpowers/
+.claude/launch.json
 .streamlit/secrets.toml
 build/
 dist/

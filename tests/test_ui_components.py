@@ -17,6 +17,25 @@ def test_render_sources_contains_links():
     )
     assert "https://example.com" in html
     assert "虎扑" in html
+    assert "[1]" in html
+    assert "新闻" in html
+
+
+def test_render_sources_formats_rfc_date():
+    html = render_sources(
+        [
+            Source(
+                id=2,
+                title="标题",
+                url="https://example.com",
+                site="ESPN",
+                type="news",
+                date="Tue, 17 Nov 2026 18:00:00 GMT",
+            )
+        ]
+    )
+    assert "2026-11-17" in html
+    assert "18:00:00 GMT" not in html
 
 
 def test_format_api_error_is_friendly():

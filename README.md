@@ -6,6 +6,12 @@
 
 数据原则：**数字走 SQL，解释走向量检索**。球员场均、球队战绩、奖项、得分王这类精确数据直接查 `data/stats.sqlite`，不把数字切块塞进向量库；新闻、比赛回顾、球员介绍、规则和战术这类非结构化内容才走向量 RAG。
 
+| 首页与偏好 | 回答、引用与来源卡片 |
+|---|---|
+| ![NBA Scout 首页](docs/images/demo-home.jpg) | ![带引用的回答和来源卡片](docs/images/demo-answer.jpg) |
+
+来源卡片会显示与正文 `[n]` 对应的编号、来源类型（数据/比分/新闻/文档/视频）、站点和日期；点标题直接打开原文。回答下方的「调试轨迹」会展开每个阶段的耗时和模型成本。
+
 ## 架构
 
 ```
@@ -55,14 +61,14 @@ Python 3.11、FastAPI、Pydantic、Streamlit、LangGraph、DeepSeek/Qwen（OpenA
 ```bash
 python -m venv .venv
 source .venv/Scripts/activate
-pip install -e ".[dev,embeddings]"
+pip install -e ".[dev,embeddings,data]"
 ```
 
 PowerShell：
 
 ```powershell
 .venv\Scripts\Activate.ps1
-pip install -e ".[dev,embeddings]"
+pip install -e ".[dev,embeddings,data]"
 ```
 
 ### 2. 配置
@@ -82,6 +88,14 @@ STATS_AS_OF=2026-11-01
 ```
 
 `STATS_AS_OF` 是历史快照的回退日期；`refresh_stats.py` 会把最新截止日写进 `stats.sqlite` 的 `meta` 表，通常不用手动改。
+
+### 2.1 检查环境
+
+```bash
+python scripts/check_setup.py
+```
+
+它会检查 Python 版本、`.env`、两个 API key、`stats.sqlite`、文档 JSONL 和 Chroma 索引；缺什么会打印下一步命令。不会调用 API，也不会打印 key 的值。
 
 ### 3. 准备结构化数据
 
@@ -146,6 +160,56 @@ streamlit run app/ui/streamlit_app.py
 
 打开 `http://localhost:8501`；API 文档在 `http://localhost:8000/docs`。
 
+## 从零复现
+
+按顺序执行：
+
+```bash
+python -m venv .venv
+source .venv/Scripts/activate
+pip install -e ".[dev,embeddings,data]"
+cp .env.example .env
+python scripts/check_setup.py
+
+kaggle datasets download -d sumitrodatta/nba-aba-baa-stats -p data/extra --unzip
+python scripts/build_stats_db.py
+python scripts/refresh_stats.py --skip-download
+
+python scripts/fetch_docs.py
+python scripts/build_doc_index.py
+python scripts/check_setup.py
+
+uvicorn app.main:app --reload
+streamlit run app/ui/streamlit_app.py
+```
+
+常见问题：
+
+- `kaggle: command not found`：先安装 Kaggle CLI，并把 `kaggle.json` 放到 `~/.kaggle/`。
+- BGE 模型下载慢或失败：给 `build_doc_index.py` 加代理，例如 `HTTPS_PROXY=http://127.0.0.1:17890 python scripts/build_doc_index.py`。
+- 没有 `data/chroma` 或文档检索为空：重新运行 `python scripts/build_doc_index.py`；换 embedding 模型后必须重建。
+- `data/nba.sqlite` 是旧 nbadb 数据，当前未使用，可以删除以释放约 2.2GB。
+- Docker Compose 会挂载本地的 `./data`，启动前先按上面的步骤准备好 `data/`。
+
+## 演示
+
+启动 API 和 Streamlit 后，按下面 5 个问题走一遍，能覆盖所有数据源：
+
+| 问题 | 观察点 |
+|---|---|
+| 库里 2026-27 赛季场均多少分？ | 数字来自 `stats.sqlite`，来源卡片编号与正文 `[1]` 对应 |
+| 2016 年总决赛第七场发生了什么？ | 文档 RAG + 视频来源，回答按来源分点 |
+| 勇士最近有什么交易传闻？ | 新闻搜索，多个来源冲突时会同时呈现 |
+| 找几个库里的三分集锦。 | B站/视频来源，标题可点击 |
+| 今天有什么比赛？ | `nba_api.live` 实时比分，比分来源类型显示为「比分」 |
+
+演示时建议按这个顺序讲：
+
+1. 先问一个统计题，说明「数字走 SQL，不走向量检索」；
+2. 再问一个历史/新闻题，说明多源路由和证据合并；
+3. 打开「调试轨迹」，指出 analyze / plan / 工具 / synthesize 各阶段耗时和单题成本；
+4. 最后说明评测结果和 P95 未达标的取舍。
+
 ## Docker
 
 ```bash
@@ -203,7 +267,7 @@ app/
   ui/                Streamlit 页面与组件
 tests/               单元测试 + API 测试 + e2e
 eval/                评测问题和报告
-scripts/             建索引、跑评测
+scripts/             环境检查、建索引、刷新数据、跑评测
 docs/                设计文档和实现计划
 ```
 

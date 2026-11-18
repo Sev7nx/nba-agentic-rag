@@ -59,6 +59,9 @@ for message in st.session_state.messages:
         st.markdown(message["content"])
         if message.get("sources"):
             st.markdown(render_sources(message["sources"]), unsafe_allow_html=True)
+        if message.get("trace"):
+            with st.expander("调试轨迹"):
+                st.markdown(render_trace(message["trace"]))
 
 if question := st.chat_input("问一个 NBA 问题，比如：斯蒂芬·库里哪场比赛最经典？"):
     st.session_state.messages.append({"role": "user", "content": question})
@@ -113,5 +116,5 @@ if question := st.chat_input("问一个 NBA 问题，比如：斯蒂芬·库里�
             st.markdown(render_trace(trace))
 
     st.session_state.messages.append(
-        {"role": "assistant", "content": answer, "sources": sources}
+        {"role": "assistant", "content": answer, "sources": sources, "trace": trace}
     )

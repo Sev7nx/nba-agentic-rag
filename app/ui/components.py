@@ -1,10 +1,32 @@
 import html
 import json
 from collections.abc import Iterable, Iterator
+from datetime import datetime
+from email.utils import parsedate_to_datetime
 
 import httpx
 
 from app.models import ChatEvent, Source, TraceStep
+
+SOURCE_TYPE_LABELS = {
+    "stats": "数据",
+    "live": "比分",
+    "news": "新闻",
+    "doc": "文档",
+    "video": "视频",
+}
+
+
+def format_source_date(value: str | None) -> str:
+    if not value:
+        return ""
+    text = value.strip()
+    for parser in (datetime.fromisoformat, parsedate_to_datetime):
+        try:
+            return parser(text).strftime("%Y-%m-%d")
+        except (TypeError, ValueError):
+            continue
+    return text
 
 
 def render_sources(sources: list[Source]) -> str:
@@ -12,12 +34,26 @@ def render_sources(sources: list[Source]) -> str:
         return "暂无来源"
     cards = []
     for source in sources:
-        date = html.escape(source.date or "")
-        warning = " · 链接可能失效" if source.link_status == "dead" else ""
+        date = html.escape(format_source_date(source.date))
+        type_label = html.escape(SOURCE_TYPE_LABELS.get(source.type, source.type))
+        meta = html.escape(
+            " · ".join(part for part in [type_label, source.site, date] if part)
+        )
+        warning = (
+            '<span style="color:#dc2626;"> · 链接可能失效</span>'
+            if source.link_status == "dead"
+            else ""
+        )
         cards.append(
-            '<div class="source-card">'
-            f'<a href="{html.escape(source.url)}" target="_blank">{html.escape(source.title)}</a>'
-            f'<span>{html.escape(source.site)} · {date}{warning}</span>'
+            '<div style="border:1px solid #e5e7eb;border-radius:10px;'
+            'padding:10px 12px;margin:8px 0;background:#fff;">'
+            f'<span style="display:inline-block;min-width:1.9em;'
+            f'color:#6b7280;font-weight:600;">[{source.id}]</span>'
+            f'<a href="{html.escape(source.url)}" target="_blank" '
+            'rel="noopener noreferrer" style="font-weight:600;">'
+            f"{html.escape(source.title)}</a>"
+            f'<div style="color:#6b7280;font-size:0.85em;'
+            f'margin-top:4px;">{meta}{warning}</div>'
             "</div>"
         )
     return "\n".join(cards)
