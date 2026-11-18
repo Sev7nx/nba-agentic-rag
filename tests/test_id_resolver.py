@@ -1,4 +1,15 @@
-from app.tools.id_resolver import entity_terms, resolve_player, resolve_team
+from app.tools.id_resolver import (
+    display_player_name,
+    entity_terms,
+    resolve_player,
+    resolve_team,
+)
+
+
+def test_display_player_name_maps_known_players():
+    assert display_player_name("Luka Doncic") == "东契奇"
+    assert display_player_name("Stephen Curry") == "库里"
+    assert display_player_name("Unknown Player") == "Unknown Player"
 
 
 def test_resolve_player_english():

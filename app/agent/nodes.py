@@ -5,7 +5,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from app.agent.prompts import ANALYSIS_SYSTEM, PLAN_SYSTEM
+from app.agent.prompts import ANALYSIS_PLAN_SYSTEM, ANALYSIS_SYSTEM, PLAN_SYSTEM
 from app.agent.state import AgentState
 from app.llm import LLMClient
 from app.models import Source
@@ -40,6 +40,8 @@ STATS_HINTS = (
     "数据",
 )
 
+VIDEO_HINTS = ("集锦", "视频", "合集", "回放", "剪辑", "highlight", "highlights")
+
 
 class Analysis(BaseModel):
     entities: list[str] = Field(default_factory=list)
@@ -57,6 +59,10 @@ class ToolCall(BaseModel):
 
 
 class Plan(BaseModel):
+    plan: list[ToolCall] = Field(default_factory=list)
+
+
+class AnalysisPlan(Analysis):
     plan: list[ToolCall] = Field(default_factory=list)
 
 
@@ -94,6 +100,55 @@ def _append_trace(
         }
     )
     return trace
+
+
+def _with_stats_guard(calls: list[dict], question: str) -> list[dict]:
+    if any(hint in question for hint in STATS_HINTS):
+        calls = [call for call in calls if call["tool"] != "stats_query"]
+        calls.insert(
+            0,
+            {
+                "tool": "stats_query",
+                "query": question,
+                "reason": "stats_keyword_guard",
+            },
+        )
+        calls = calls[:4]
+    return calls
+
+
+def _with_video_guard(calls: list[dict], question: str) -> list[dict]:
+    if any(hint in question.lower() for hint in VIDEO_HINTS):
+        if not any(call["tool"] == "search_videos" for call in calls):
+            calls = [
+                {
+                    "tool": "search_videos",
+                    "query": question,
+                    "reason": "video_keyword_guard",
+                }
+            ] + calls
+            calls = calls[:4]
+    return calls
+
+
+def _apply_guards(calls: list[dict], question: str) -> list[dict]:
+    return _with_video_guard(
+        _with_stats_guard(calls, question),
+        question,
+    )
+
+
+def _clean_calls(calls: list[ToolCall], question: str) -> list[dict]:
+    cleaned = [
+        call.model_dump()
+        for call in calls
+        if call.tool in TOOL_NAMES
+        and (
+            call.tool != "fetch_page"
+            or call.query.strip().startswith(("http://", "https://"))
+        )
+    ][:4]
+    return _apply_guards(cleaned, question)
 
 
 def analyze_query(state: AgentState, llm: LLMClient) -> dict:
@@ -138,41 +193,23 @@ def plan_tools(state: AgentState, llm: LLMClient) -> dict:
     start = time.perf_counter()
     try:
         plan = llm.chat_json(PLAN_SYSTEM, user, Plan)
-        calls = [
-        call.model_dump()
-        for call in plan.plan
-        if call.tool in TOOL_NAMES
-        and (
-            call.tool != "fetch_page"
-            or call.query.strip().startswith(("http://", "https://"))
-        )
-    ][:4]
+        calls = _clean_calls(plan.plan, state["question"])
     except Exception:
-        calls = [
-            {
-                "tool": "doc_search",
-                "query": state["question"],
-                "reason": "llm_fallback",
-            },
-            {
-                "tool": "search_news",
-                "query": state["question"],
-                "reason": "llm_fallback",
-            },
-        ]
-    if any(hint in state["question"] for hint in STATS_HINTS):
-        calls = [
-            call for call in calls if call["tool"] != "stats_query"
-        ]
-        calls.insert(
-            0,
-            {
-                "tool": "stats_query",
-                "query": state["question"],
-                "reason": "stats_keyword_guard",
-            },
+        calls = _apply_guards(
+            [
+                {
+                    "tool": "doc_search",
+                    "query": state["question"],
+                    "reason": "llm_fallback",
+                },
+                {
+                    "tool": "search_news",
+                    "query": state["question"],
+                    "reason": "llm_fallback",
+                },
+            ],
+            state["question"],
         )
-        calls = calls[:4]
     duration_ms = int((time.perf_counter() - start) * 1000)
     usage = getattr(llm, "last_usage", {}) or {}
     detail = " | ".join(
@@ -184,6 +221,59 @@ def plan_tools(state: AgentState, llm: LLMClient) -> dict:
             state,
             "plan",
             detail,
+            duration_ms,
+            usage.get("tokens", 0),
+            usage.get("cost_cny", 0.0),
+        ),
+    }
+
+
+def analyze_and_plan(state: AgentState, llm: LLMClient) -> dict:
+    user = (
+        f"历史对话:\n{_history_text(state)}\n"
+        f"问题: {state['question']}\n"
+        f"用户偏好: {_profile_text(state)}\n"
+        f"可用工具: {sorted(TOOL_NAMES)}"
+    )
+    start = time.perf_counter()
+    try:
+        result = llm.chat_json(ANALYSIS_PLAN_SYSTEM, user, AnalysisPlan)
+        analysis = Analysis(**result.model_dump(exclude={"plan"}))
+        if analysis.ambiguous and any(
+            entity in PLAYER_ALIASES or entity in TEAM_ALIASES
+            for entity in analysis.entities
+        ):
+            analysis.ambiguous = False
+        calls = _clean_calls(result.plan, state["question"])
+    except Exception:
+        analysis = Analysis(intent="other")
+        calls = _apply_guards(
+            [
+                {
+                    "tool": "doc_search",
+                    "query": state["question"],
+                    "reason": "llm_fallback",
+                },
+                {
+                    "tool": "search_news",
+                    "query": state["question"],
+                    "reason": "llm_fallback",
+                },
+            ],
+            state["question"],
+        )
+    duration_ms = int((time.perf_counter() - start) * 1000)
+    usage = getattr(llm, "last_usage", {}) or {}
+    detail = " | ".join(
+        f"{call['tool']}：{call['query'][:40]}" for call in calls
+    ) or "0 tools"
+    return {
+        "analysis": analysis.model_dump(),
+        "plan": calls,
+        "trace": _append_trace(
+            state,
+            "analyze_plan",
+            f"{analysis.intent} | {detail}",
             duration_ms,
             usage.get("tokens", 0),
             usage.get("cost_cny", 0.0),
@@ -278,7 +368,8 @@ def check_links(sources: list[Source], checker=None) -> list[Source]:
     if not targets:
         return sources
     check = checker or is_link_alive
-    with ThreadPoolExecutor(max_workers=min(4, len(targets))) as pool:
+    # 最多 8 条来源，一次并发查完，避免 4 并发时排成两轮、每轮等 3 秒超时
+    with ThreadPoolExecutor(max_workers=min(8, len(targets))) as pool:
         statuses = list(pool.map(lambda source: check(source.url), targets))
     for source, alive in zip(targets, statuses):
         source.link_status = "ok" if alive else "dead"
@@ -304,12 +395,26 @@ def synthesize(state: AgentState, llm: LLMClient) -> dict:
                 snippet=data.get("snippet"),
             )
         )
+    link_start = time.perf_counter()
+    checked = len(
+        [source for source in sources if source.type not in {"stats", "live"}]
+    )
     sources = check_links(sources)
+    dead = len([source for source in sources if source.link_status == "dead"])
+    link_ms = int((time.perf_counter() - link_start) * 1000)
+
     live_sources = [
         source for source in sources if source.link_status != "dead"
     ]
     if live_sources:
         sources = live_sources
+
+    trace = _append_trace(
+        state,
+        "link_check",
+        f"{checked} checked, {dead} dead",
+        link_ms,
+    )
 
     context = "\n".join(
         f"[{item.id}] {item.title}: {item.snippet or ''}" for item in sources[:8]
@@ -317,7 +422,7 @@ def synthesize(state: AgentState, llm: LLMClient) -> dict:
     start = time.perf_counter()
     try:
         answer = llm.chat_text(
-            "你是 NBA 问答助手。只根据给定来源回答，关键事实后标注 [n]。如果来源之间冲突，必须同时呈现双方，不要只给一个结论。没有来源就说没找到。",
+            "你是 NBA 问答助手。只根据给定来源回答，关键事实后标注 [n]。如果来源之间冲突，必须同时呈现双方，不要只给一个结论。没有来源就说没找到。用中文简洁回答，通常不超过 400 字；必须保留来源中的关键数字、球员姓名、比赛结果和年份，不要省略；不要逐条复述来源标题。",
             f"历史对话:\n{_history_text(state)}\n"
             f"问题: {state['question']}\n来源:\n{context}",
         )
@@ -329,17 +434,19 @@ def synthesize(state: AgentState, llm: LLMClient) -> dict:
         )
     duration_ms = int((time.perf_counter() - start) * 1000)
     usage = getattr(llm, "last_usage", {}) or {}
+    trace.append(
+        {
+            "name": "synthesize",
+            "detail": f"{len(sources)} sources",
+            "duration_ms": duration_ms,
+            "tokens": usage.get("tokens", 0),
+            "cost_cny": usage.get("cost_cny", 0.0),
+        }
+    )
     return {
         "answer": answer,
         "sources": sources,
-        "trace": _append_trace(
-            state,
-            "synthesize",
-            f"{len(sources)} sources",
-            duration_ms,
-            usage.get("tokens", 0),
-            usage.get("cost_cny", 0.0),
-        ),
+        "trace": trace,
     }
 
 

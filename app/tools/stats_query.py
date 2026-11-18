@@ -8,6 +8,7 @@ from app.tools.base import SearchResult
 from app.tools.id_resolver import (
     PLAYER_ALIASES,
     TEAM_ALIASES,
+    display_player_name,
     resolve_player,
     resolve_team,
 )
@@ -139,7 +140,7 @@ class StatsDB:
         ).fetchone()
         label = self._season_label(season)
         parts = [
-            f"{row['player']}（{row['team']}），{label} 赛季：",
+            f"{display_player_name(row['player'])}（{row['team']}），{label} 赛季：",
             f"{row['g']} 场，场均 {_fmt(row['pts_per_game'])} 分、"
             f"{_fmt(row['trb_per_game'])} 篮板、{_fmt(row['ast_per_game'])} 助攻",
             f"投篮 {_fmt(row['fg_percent'], scale=100)}%、"
@@ -160,7 +161,7 @@ class StatsDB:
                 parts.append("；".join(advanced_parts))
         url, site = self._source(season)
         return SearchResult(
-            title=f"{row['player']} {label} 赛季数据",
+            title=f"{display_player_name(row['player'])} {label} 赛季数据",
             url=url,
             site=site,
             snippet=self._stamp(" ".join(parts)),
@@ -315,7 +316,7 @@ class StatsDB:
             return None
         label = self._season_label(season)
         parts = [
-            f"{index + 1}. {row['player']}（{row['team']}）{_fmt(row['value'])}"
+            f"{index + 1}. {display_player_name(row['player'])}（{row['team']}）{_fmt(row['value'])}"
             for index, row in enumerate(rows)
         ]
         url, site = self._source(season)

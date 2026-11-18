@@ -10,6 +10,24 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app.models import ChatRequest
 
+STAGE_ORDER = (
+    "analyze",
+    "plan",
+    "analyze_plan",
+    "link_check",
+    "synthesize",
+    "verify",
+    "refine",
+)
+TOOL_NAMES = {
+    "doc_search",
+    "search_news",
+    "search_videos",
+    "fetch_page",
+    "live_query",
+    "stats_query",
+}
+
 
 @dataclass
 class EvalQuestion:
@@ -29,6 +47,9 @@ class EvalReport:
     link_validity: float = 0.0
     p95_latency_ms: float = 0.0
     avg_cost_cny: float = 0.0
+    stage_avg_ms: dict[str, float] = field(default_factory=dict)
+    stage_max_ms: dict[str, float] = field(default_factory=dict)
+    stage_rows: list[dict] = field(default_factory=list)
     rows: list[dict] = field(default_factory=list)
 
     def to_markdown(self) -> str:
@@ -52,6 +73,43 @@ class EvalReport:
                 f"{row['types']} | {row['hit']} | {row['fact']} | "
                 f"{row['cited']} | {row['latency_ms']:.1f} |"
             )
+        if self.stage_avg_ms:
+            lines.extend(
+                [
+                    "",
+                    "## Stage breakdown (ms)",
+                    "",
+                    "| stage | avg | max |",
+                    "|---|---:|---:|",
+                ]
+            )
+            for name in sorted(
+                self.stage_avg_ms,
+                key=lambda item: self.stage_avg_ms[item],
+                reverse=True,
+            ):
+                lines.append(
+                    f"| {name} | {self.stage_avg_ms[name]:.0f} | "
+                    f"{self.stage_max_ms.get(name, 0):.0f} |"
+                )
+        if self.stage_rows:
+            lines.extend(
+                [
+                    "",
+                    "| id | analyze_plan | analyze | plan | tools | link_check | synthesize | total |",
+                    "|---|---:|---:|---:|---:|---:|---:|---:|",
+                ]
+            )
+            for row in self.stage_rows:
+                lines.append(
+                    f"| {row['id']} | "
+                    f"{row.get('analyze_plan', 0):.0f} | "
+                    f"{row.get('analyze', 0):.0f} | "
+                    f"{row.get('plan', 0):.0f} | {row.get('tools', 0):.0f} | "
+                    f"{row.get('link_check', 0):.0f} | "
+                    f"{row.get('synthesize', 0):.0f} | "
+                    f"{row.get('total', 0):.0f} |"
+                )
         return "\n".join(lines)
 
 
@@ -73,12 +131,34 @@ def evaluate(questions: list[EvalQuestion], chat_service) -> EvalReport:
     latencies: list[float] = []
     costs: list[float] = []
     rows: list[dict] = []
+    stage_values: dict[str, list[float]] = {name: [] for name in STAGE_ORDER}
+    stage_values["tools"] = []
+    stage_values["total"] = []
+    stage_rows: list[dict] = []
 
     for question in questions:
         start = time.perf_counter()
         response = chat_service.answer(ChatRequest(question=question.question))
         latency_ms = (time.perf_counter() - start) * 1000
         latencies.append(latency_ms)
+        stage_ms = {name: 0.0 for name in STAGE_ORDER}
+        stage_ms["tools"] = 0.0
+        stage_ms["total"] = latency_ms
+        for step in response.trace:
+            if isinstance(step, dict):
+                name = step.get("name", "")
+                duration = step.get("duration_ms", 0)
+            else:
+                name = getattr(step, "name", "")
+                duration = getattr(step, "duration_ms", 0)
+            duration = float(duration or 0)
+            if name in stage_ms and name != "total":
+                stage_ms[name] += duration
+            elif name in TOOL_NAMES:
+                stage_ms["tools"] += duration
+        for name in stage_values:
+            stage_values[name].append(stage_ms.get(name, 0.0))
+        stage_rows.append({"id": question.id, **stage_ms})
         hit = _hit(question, response)
         hits += 1 if hit else 0
         cited = bool(re.search(r"\[\d+\]", response.answer)) and bool(response.sources)
@@ -124,6 +204,17 @@ def evaluate(questions: list[EvalQuestion], chat_service) -> EvalReport:
         link_validity=(valid_links / total_links) if total_links else 1.0,
         p95_latency_ms=sorted_latencies[p95_index],
         avg_cost_cny=(sum(costs) / len(questions)) if costs else 0.0,
+        stage_avg_ms={
+            name: sum(values) / len(values)
+            for name, values in stage_values.items()
+            if values
+        },
+        stage_max_ms={
+            name: max(values)
+            for name, values in stage_values.items()
+            if values
+        },
+        stage_rows=stage_rows,
         rows=rows,
     )
 
@@ -158,10 +249,15 @@ class _FakeService:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--limit", type=int, default=None)
+    parser.add_argument("--ids", default=None, help="comma-separated question ids")
+    parser.add_argument("--output", default="eval/report.md")
     parser.add_argument("--fake", action="store_true")
     args = parser.parse_args()
 
     questions = load_questions(Path("eval/questions.jsonl"))
+    if args.ids:
+        wanted = {item.strip() for item in args.ids.split(",") if item.strip()}
+        questions = [question for question in questions if question.id in wanted]
     if args.limit:
         questions = questions[: args.limit]
 
@@ -173,8 +269,9 @@ def main() -> None:
         service = build_default_service(use_cache=False)
 
     report = evaluate(questions, service)
-    Path("eval").mkdir(exist_ok=True)
-    Path("eval/report.md").write_text(report.to_markdown(), encoding="utf-8")
+    output = Path(args.output)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(report.to_markdown(), encoding="utf-8")
     print(report.to_markdown())
 
 

@@ -24,7 +24,7 @@ FastAPI 后端（/api/chat、/api/chat/stream、/api/profile、/docs）
   │
   ▼
 LangGraph Agent
-  analyze_query → plan → execute_tools → grade_evidence → synthesize → verify
+  analyze_plan → execute_tools → grade_evidence → synthesize → verify
                                    │
        ┌───────────────┬───────────┼────────────┬──────────────┐
        ▼               ▼           ▼            ▼              ▼
@@ -38,8 +38,8 @@ LangGraph Agent
 ## 功能
 
 - 中文聊天界面，SSE 流式输出
-- 查询分析：实体、意图、时效性、歧义
-- Agent 规划：最多 4 个工具调用、2 轮检索
+- 查询分析与规划：一次 LLM 调用同时输出实体、意图、时效性、歧义和 1–4 个工具计划
+- 最多 4 个工具调用、2 轮检索
 - 多源检索：结构化统计、今日比分、新闻、视频、网页正文
 - 结构化数据精确查询：球员赛季/生涯、球队战绩、奖项、得分王；数字走 SQL，不做向量检索
 - 当前赛季每日刷新：ESPN 球员数据 + Kaggle TeamStatistics，自动更新 `as_of`
@@ -239,7 +239,7 @@ python scripts/eval.py --limit 3 --fake   # 不调 API，检查报告格式
 
 目标：命中率 ≥ 70%，引用覆盖 ≥ 90%，链接有效 ≥ 95%，P95 < 10 秒，单次成本 < 0.2 元。
 
-最近一次真实评测（2026-11-17，24 题，DeepSeek + Tavily，65 篇文档 / 810 chunks）：
+最近一次真实评测（2026-11-18，24 题，DeepSeek + Tavily，65 篇文档 / 810 chunks）：
 
 | 指标 | 结果 | 目标 |
 |---|---:|---:|
@@ -247,12 +247,12 @@ python scripts/eval.py --limit 3 --fake   # 不调 API，检查报告格式
 | citation_coverage | 1.000 | ≥ 0.90 |
 | fact_hit_rate | 1.000 | — |
 | link_validity | 1.000* | ≥ 0.95 |
-| p95_latency_ms | 19,398 | < 10,000 |
-| avg_cost_cny | 0.0145 | < 0.20 |
+| p95_latency_ms | 18,718 | < 10,000 |
+| avg_cost_cny | 0.0119 | < 0.20 |
 
 \* 死链在返回前丢弃，`link_validity` 只统计返回的可用链接。
 
-P95 还没达到 10 秒目标；主要耗时在 `analyze` / `plan` / `synthesize` 三次 LLM 调用和外部检索。下一步可以合并 `analyze` 和 `plan`，或让结构化统计走 fast path。
+P95 还没达到 10 秒目标。当前平均端到端约 12.5 秒，主要瓶颈是外部检索（单题峰值约 15.7 秒）、synthesize（平均约 5.2 秒）和 analyze_plan（平均约 3.8 秒）。已做的优化：合并 analyze+plan、链接检查从 4 路并发提到 8 路、回答更简洁但保留关键数字和球员姓名。下一步可以让结构化统计走确定性 fast path，或对外部检索加更细的超时和降级。
 
 把真实跑出来的结果填到 README 或简历里；不要用 `--fake` 的数字冒充真实指标。
 
@@ -280,7 +280,7 @@ docs/                设计文档和实现计划
 - **为什么用 LangGraph**：状态机显式、可调试，后续可以加 Planner/Critic 演进到多 Agent。
 - **检索质量**：切块 + 元数据（doc_type/来源/日期）+ 向量检索 + doc_type 过滤 + 实体加权 + 可选 BGE 重排 + 来源质量评分。
 - **防幻觉**：每个关键事实带引用；没有来源就明确说没找到；自检不过最多重试一次。
-- **成本与延迟**：缓存、并行工具、最多 4 次调用 / 2 轮检索、便宜模型。
+- **成本与延迟**：缓存、并行工具、最多 4 次调用 / 2 轮检索、便宜模型；问题分析和检索规划合并成一次 LLM 调用，链接检查 8 路并发，回答简洁但保留关键数字和球员姓名。
 - **评测**：24 题评测集 + 自动指标，而不是「我觉得挺好」。
 
 ## 已知限制

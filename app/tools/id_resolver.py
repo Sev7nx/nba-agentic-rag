@@ -49,6 +49,13 @@ TEAM_ALIASES = {
 }
 
 
+def display_player_name(name: str) -> str:
+    for zh, en in PLAYER_ALIASES.items():
+        if en == name:
+            return zh
+    return name
+
+
 def _normalize(value: str) -> str:
     return value.strip().lower()
 

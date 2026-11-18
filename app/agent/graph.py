@@ -1,11 +1,10 @@
 from langgraph.graph import END, START, StateGraph
 
 from app.agent.nodes import (
-    analyze_query,
+    analyze_and_plan,
     clarify,
     execute_tools,
     grade_evidence,
-    plan_tools,
     refuse,
     refine_query,
     synthesize,
@@ -29,29 +28,27 @@ def route_after_analyze(state: AgentState) -> str:
         return "refuse"
     if analysis.get("ambiguous", False):
         return "clarify"
-    return "plan"
+    return "execute"
 
 
 def build_graph(llm: LLMClient, tools: dict):
     graph = StateGraph(AgentState)
-    graph.add_node("analyze", lambda state: analyze_query(state, llm))
+    graph.add_node("analyze_plan", lambda state: analyze_and_plan(state, llm))
     graph.add_node("refuse", refuse)
     graph.add_node("clarify", clarify)
-    graph.add_node("plan", lambda state: plan_tools(state, llm))
     graph.add_node("execute", lambda state: execute_tools(state, tools))
     graph.add_node("grade", grade_evidence)
     graph.add_node("synthesize", lambda state: synthesize(state, llm))
     graph.add_node("verify", verify)
     graph.add_node("refine", refine_query)
-    graph.add_edge(START, "analyze")
+    graph.add_edge(START, "analyze_plan")
     graph.add_conditional_edges(
-        "analyze",
+        "analyze_plan",
         route_after_analyze,
-        {"refuse": "refuse", "clarify": "clarify", "plan": "plan"},
+        {"refuse": "refuse", "clarify": "clarify", "execute": "execute"},
     )
     graph.add_edge("refuse", END)
     graph.add_edge("clarify", END)
-    graph.add_edge("plan", "execute")
     graph.add_edge("execute", "grade")
     graph.add_edge("grade", "synthesize")
     graph.add_edge("synthesize", "verify")

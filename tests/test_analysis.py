@@ -1,4 +1,4 @@
-from app.agent.nodes import analyze_query, plan_tools, synthesize
+from app.agent.nodes import analyze_and_plan, analyze_query, plan_tools, synthesize
 from app.tools.base import SearchResult
 
 
@@ -155,6 +155,82 @@ def test_analyze_query_appends_trace():
         ),
     )
     assert out["trace"][-1]["name"] == "analyze"
+
+
+def test_analyze_and_plan_returns_analysis_and_plan():
+    state = {"question": "库里哪场比赛最经典", "history": [], "profile": {}}
+    out = analyze_and_plan(
+        state,
+        FakeLLM(
+            {
+                "entities": ["库里"],
+                "intent": "history",
+                "time_sensitivity": "classic",
+                "language": "zh",
+                "plan": [
+                    {
+                        "tool": "doc_search",
+                        "query": "库里 经典",
+                        "reason": "history",
+                    }
+                ],
+            }
+        ),
+    )
+    assert out["analysis"]["entities"] == ["库里"]
+    assert out["plan"][0]["tool"] == "doc_search"
+    assert out["trace"][-1]["name"] == "analyze_plan"
+
+
+def test_analyze_and_plan_adds_stats_guard():
+    state = {"question": "库里本赛季场均多少分？", "history": [], "profile": {}}
+    out = analyze_and_plan(
+        state,
+        FakeLLM(
+            {
+                "entities": ["库里"],
+                "intent": "stats",
+                "time_sensitivity": "latest",
+                "language": "zh",
+                "plan": [
+                    {"tool": "search_news", "query": "库里", "reason": "news"}
+                ],
+            }
+        ),
+    )
+    assert out["plan"][0]["tool"] == "stats_query"
+    assert out["plan"][0]["query"] == state["question"]
+
+
+def test_analyze_and_plan_adds_video_guard():
+    state = {"question": "约基奇本赛季的助攻集锦。", "history": [], "profile": {}}
+    out = analyze_and_plan(
+        state,
+        FakeLLM(
+            {
+                "entities": ["约基奇"],
+                "intent": "video",
+                "time_sensitivity": "latest",
+                "language": "zh",
+                "plan": [
+                    {
+                        "tool": "stats_query",
+                        "query": "约基奇 助攻",
+                        "reason": "stats",
+                    }
+                ],
+            }
+        ),
+    )
+    assert out["plan"][0]["tool"] == "search_videos"
+    assert out["plan"][0]["reason"] == "video_keyword_guard"
+
+
+def test_analyze_and_plan_falls_back_on_llm_error():
+    state = {"question": "库里", "history": [], "profile": {}}
+    out = analyze_and_plan(state, FailingLLM())
+    assert out["analysis"]["intent"] == "other"
+    assert {call["tool"] for call in out["plan"]} == {"doc_search", "search_news"}
 
 
 def test_plan_tools_falls_back_on_llm_error():

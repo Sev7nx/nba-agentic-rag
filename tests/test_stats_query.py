@@ -159,8 +159,8 @@ def test_awards_beat_career_when_both_present(stats_db):
 
 def test_league_leaders(stats_db):
     results = stats_query("2026-27 得分王")
-    assert "1. Luka Doncic" in results[0].snippet
-    assert "Stephen Curry" in results[0].snippet
+    assert "1. 东契奇" in results[0].snippet
+    assert "库里" in results[0].snippet
 
 
 def test_unknown_query_returns_empty(stats_db):
